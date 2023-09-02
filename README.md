@@ -1,9 +1,9 @@
 # Arms: Zabbix sync
-Синхронизация Zabbix с узлами Inventory
+Синхронизация Zabbix с узлами [Inventory](https://github.com/spo0okie/arms_inventory)
 
 ## Требования
   * Zabbix 6.0 - 6.4
-  * Inventory желательно последней версии
+  * [Inventory](https://github.com/spo0okie/arms_inventory) желательно последней версии
   * php не ниже 7.4
 
 ## Настройка
