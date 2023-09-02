@@ -1,0 +1,12 @@
+#prvate config files
+*.priv.*
+
+#work env
+.idea
+test.cmd
+
+#work archive
+_arch
+
+#work text files (contain prvate and enterprise info_
+*.txt
