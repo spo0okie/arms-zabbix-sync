@@ -1,6 +1,7 @@
 #!/usr/bin/php
 <?php
 /*
+v6.1	+ verbose mode
 v6		* режим "конвейера/конвертера" узлов инвентори->zabbix
 v5.1	+ синхронизация тегов
 v5		+ синхронизация/обновление существующих узлов zabbix
@@ -37,9 +38,14 @@ $errorsList=[
 	'createdOK'=>[]
 ];
 
-$dryRun=true;
+$dryRun=!(array_search('real',$argv)!==false);
+$verbose=(array_search('verbose',$argv)!==false);
 
-if (array_search('real',$argv)!==false) $dryRun=false;
+function verboseMsg($msg) {
+	global $verbose;
+	if (!$verbose) return;
+	echo $msg;
+}
 
 echo "Initializin Inventory API ... ";
 $inventory=new inventoryApi();
@@ -62,27 +68,20 @@ echo "Loading Pipeline ... ";
     $pipeLine->init($zabbix,$inventory,require __DIR__.'/rules.priv.php');
 echo "complete\n";
 
-
+//обходим оборудование и ОС
 foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
     //имя узла
     $hostName=$item['class']=='comps'?$item['fqdn']:$item['num'];
 
-    //DEBUG
-    //if ($hostName!='КЛГ-ВИД-0017') continue;
-	//print_r($item['supportTeam']);
-
     //прогоняем узел через конвейер чтобы понять что с ним делать
 	$params=$pipeLine->pipeHost($item);
-	//print_r($params); exit;
 
 	//если получили какие-то параметры, то смотрим есть ли actions и нет ли ошибок
 	if (!count($params)) {  //пропускаем узлы у которых ничего не нужно делать
-		//echo "$hostName - no actions\n";
-
+		verboseMsg("$hostName - no pipeline output\n");
     } elseif (isset($params['errors'])) {    //пропускаем узлы с ошибками
-	    if (!is_array($params['errors'])) $params['errors']=[$params['errors']];
-	    //echo "$hostName - ".implode('; ',$params['errors'])."\n";
-
+		if (!is_array($params['errors'])) $params['errors']=[$params['errors']];
+		verboseMsg("$hostName - ".implode('; ',$params['errors'])."\n");
     } elseif (isset($params['actions'])) {  //узлы где нужно что-то делать и нет ошибок
 		$actions=$params['actions'];
 
@@ -90,9 +89,6 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
 		if (array_search('update',$actions)!==false) {
 
 			$hostid=$pipeLine->findZabbixHostid($item);
-			//DEBUG
-			//$hostid=10182;
-            //exit;
 
             //Узел есть в заббикс?
             if (!$hostid) {
@@ -113,7 +109,7 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
                         //exit;
                     }
 
-				} //else echo "$hostName - no create!\n";
+				} else verboseMsg("$hostName - no create!\n");
 			} else {
 				$zHost=$zabbix->getHost($hostid);
 				//print_r($zHost); //exit;
@@ -132,9 +128,10 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
 					//exit;
                 }
 			}
-		} //else echo "$hostName - no update!\n";
-	}
+		} else verboseMsg("$hostName - no update!\n");
+	} else verboseMsg("$hostName - no actions!\n");
 }
+echo "script done.\n";
 exit();
 
 ?>
