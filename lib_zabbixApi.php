@@ -69,26 +69,56 @@ class zabbixApi {
 	}
 
 
-	function cacheHosts() {
-		if (
-			isset($this->cache['hosts']) &&
-			is_array($this->cache['hosts']) &&
-			count($this->cache['hosts'])
-		) return;
-		$params=new stdClass();
-		$params->selectMacros="extend";
-		$params->selectTags="extend";
-		$params->selectInterfaces="extend";
-		$params->selectHostGroups="extend";
-		$params->selectParentTemplates=['name','templateid']; //другого не надо вроде
+    function cacheHosts() {
+        if (
+            isset($this->cache['hosts']) &&
+            is_array($this->cache['hosts']) &&
+            count($this->cache['hosts'])
+        ) return;
+        $params=new stdClass();
+        $params->selectMacros="extend";
+        $params->selectTags="extend";
+        $params->selectInterfaces="extend";
+        $params->selectHostGroups="extend";
+        $params->selectParentTemplates=['name','templateid']; //другого не надо вроде
 
-		$this->cache['hosts']=[];
-		foreach ($this->req('host.get',$params) as $host) {
-			$this->cache['hosts'][$host['hostid']]=$host;
-		}
-	}
+        $this->cache['hosts']=[];
+        foreach ($this->req('host.get',$params) as $host) {
+            $this->cache['hosts'][$host['hostid']]=$host;
+        }
+    }
 
-	function cacheTemplates() {
+    function cacheUsers() {
+        if (
+            isset($this->cache['users']) &&
+            is_array($this->cache['users']) &&
+            count($this->cache['users'])
+        ) return;
+        $params=new stdClass();
+        $params->output="extend";
+
+        $this->cache['users']=[];
+        foreach ($this->req('user.get',$params) as $user) {
+            $this->cache['users'][$user['userid']]=$user;
+        }
+    }
+
+    function cacheActions() {
+        if (
+            isset($this->cache['actions']) &&
+            is_array($this->cache['actions']) &&
+            count($this->cache['actions'])
+        ) return;
+        $params=new stdClass();
+        $params->output="extend";
+
+        $this->cache['actions']=[];
+        foreach ($this->req('action.get',$params) as $action) {
+            $this->cache['actions'][$action['actionid']]=$action;
+        }
+    }
+
+    function cacheTemplates() {
 		if (
 			isset($this->cache['templates']) &&
 			is_array($this->cache['templates']) &&
@@ -841,5 +871,17 @@ class zabbixApi {
 			echo " - host $method ERROR";
 
 	}
+
+    public function searchUserByLogin($login) {
+        $this->cacheUsers();
+
+        return arrHelper::getItemsByFields($this->cache['users'],['username'=>$login]);
+    }
+
+    public function searchActionByName($name) {
+        $this->cacheActions();
+
+        return arrHelper::getItemsByFields($this->cache['actions'],['name'=>$name]);
+    }
 
 }
