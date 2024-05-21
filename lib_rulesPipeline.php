@@ -87,7 +87,10 @@ class rulesPipeline {
 		if (array_search('*',$services)!==false) {
 			//если в качестве условия указано * - значит нужен просто любой сервис
 			return (boolean)(count($hostServices));
-		} else {
+		} elseif (array_search(false,$services)!==false) {
+            //если в качестве условия указано FALSE - значит нужно отсутствие любого сервиса
+            return !(boolean)(count($hostServices));
+        } else {
 			$svcNames=arrHelper::getItemsField($hostServices,'name');
 			return (boolean)(count(array_intersect($services,$svcNames)));
 		}
