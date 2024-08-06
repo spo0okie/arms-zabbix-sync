@@ -291,7 +291,7 @@ class arrHelper {
 	    foreach ($search as $item) {
 	        $len=strlen($item);
 	        if ($len>2 && substr($item,0,1)==='/' && substr($item,$len-1,1)==='/') {
-	            if (preg_match($item,$value)!==false) return true;
+	            if (preg_match($item,$value)) return true;
             } else {
                 if ($value==$item) return true;
             }

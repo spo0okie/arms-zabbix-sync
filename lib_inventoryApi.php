@@ -65,7 +65,7 @@ class inventoryApi {
 			$period_limit='&CompsSearch[updated_at]=>'.$today->format('Y-m-d');
 		} else $period_limit='';
 
-		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,services'.$period_limit);
+		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,sandbox,services'.$period_limit);
 		$obj=json_decode($data,true);
 		//var_dump($data);
 		foreach ($obj as $comp) {
@@ -170,6 +170,19 @@ class inventoryApi {
 			'serviceman'=>static::cutFirstWords($service['infrastructureResponsibleName']),
 			'supportteam'=>static::cutFirstWords($service['infrastructureSupportNames'])
 		];
+	}
+
+	/**
+	 * Возвращает ассоциативный массив внешних ссылок
+	 * @param $iHost
+	 * @return array
+	 */
+	public static function externalLinks($iHost) {
+		$hostLinks=trim($iHost['external_links']??'[]');
+		if (!strlen($hostLinks)) $hostLinks = '[]'; //ну это на случай что там каким-то образом пусто сохранено
+		$jsonLinks=json_decode($hostLinks,true);
+		if (!is_array($jsonLinks)) $jsonLinks=[];
+		return $jsonLinks;
 	}
 }
 

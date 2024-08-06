@@ -14,14 +14,19 @@ class rulesPipeline {
 	public $zabbixTemplates;
 	public $zabbixGroups;
 
+    const macroAny='*';
+    const macroNone=false;
+
 	static $inventoryMacros=[
 		'${inventory:fqdn}'=>'macroInventoryFqdn',
 		'${inventory:num}'=>'macroInventoryNum',
 		'${inventory:class}'=>'macroInventoryClass',
 		'${inventory:id}'=>'macroInventoryId',
 		'${inventory:ip}'=>'macroInventoryIp',
-		'${inventory:serviceman}'=>'macroInventoryServiceman',
-		'${inventory:supportTeam}'=>'macroInventorySupportTeam',
+        '${inventory:serviceman}'=>'macroInventoryServiceman',
+        '${inventory:supportTeam}'=>'macroInventorySupportTeam',
+        '${vmware:uuid}'=>'macroVmwareUuid',
+        '${vmware:vcenter}'=>'macroVmwareVcenter',
 	];
 
 	public function init($zabbix,$inventory,$rules){
@@ -66,7 +71,7 @@ class rulesPipeline {
 		if (!is_array($ips)) $ips=[$ips];
 		$hostIps=arrHelper::getMultiStringValue($iHost['ip']??'');
 		//print_r($hostIps);
-		if (array_search('*',$ips)!==false) {
+		if (array_search(static::macroAny,$ips)!==false) {
 			//если в качестве условия указано * - значит нужен просто любой не пустой IP
 			//echo count($hostIps)."\n";
 			return (boolean)(count($hostIps));
@@ -84,10 +89,10 @@ class rulesPipeline {
 	public static function conditionService($services,$iHost) {
 		if (!is_array($services)) $services=[$services];
 		$hostServices=$iHost['services']??[];;
-		if (array_search('*',$services)!==false) {
+		if (array_search(static::macroAny,$services)!==false) {
 			//если в качестве условия указано * - значит нужен просто любой сервис
 			return (boolean)(count($hostServices));
-		} elseif (array_search(false,$services)!==false) {
+		} elseif (array_search(static::macroNone,$services)!==false) {
             //если в качестве условия указано FALSE - значит нужно отсутствие любого сервиса
             return !(boolean)(count($hostServices));
         } else {
@@ -214,7 +219,46 @@ class rulesPipeline {
 		return (boolean)$iHost['archived'] == (boolean)$status;
 	}
 
-	// ОБХОД наборов правил
+    /**
+     * Проверка соответствия песочницы ОС из инвентори набору $sandboxes
+     * @param $sandboxes
+     * @param $iHost
+     * @return boolean
+     */
+    public static function conditionSandbox($sandboxes,$iHost) {
+        $sandbox=trim($iHost['sandbox']['name']??'!none_found');
+        if (!is_array($sandboxes)) $sandboxes=[$sandboxes];
+        if (array_search(static::macroAny,$sandboxes)!==false) {
+            //если в качестве условия указано * - значит нужен просто любая песочница
+            return $sandbox!=='!none_found';
+        } elseif (array_search(static::macroNone,$sandboxes)!==false) {
+            //если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+            return $sandbox==='!none_found';
+        } else {
+            return array_search($sandbox,$sandboxes)!==false;
+        }
+    }
+
+    /**
+     * Проверка наличия внешних узлов
+     * @param $links
+     * @param $iHost
+     * @return boolean
+     */
+    public static function conditionExtlink($links,$iHost) {
+        $jsonLinks=inventoryApi::externalLinks($iHost);
+        if (array_search(static::macroAny,$links)!==false) {
+            //если в качестве условия указано * - значит нужен просто любая ссылка
+            return count($jsonLinks);
+        } elseif (array_search(static::macroNone,$links)!==false) {
+            //если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+            return !count($jsonLinks);
+        } else {
+            return count(array_intersect(array_keys($jsonLinks),$links));
+        }
+    }
+
+    // ОБХОД наборов правил
 
 	/**
 	 * Проверяет соответствия узла условию
@@ -293,7 +337,19 @@ class rulesPipeline {
 		return $iHost['id'];
 	}
 
-	public static function macroInventoryIp($iHost) {
+    public static function macroVmwareUuid($iHost) {
+        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
+        if (!strpos($vmUUID,'@')) return '';
+        return explode('@',$vmUUID)[0];
+    }
+
+    public static function macroVmwareVcenter($iHost) {
+        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
+        if (!strpos($vmUUID,'@')) return '';
+        return explode('@',$vmUUID)[1];
+    }
+
+    public static function macroInventoryIp($iHost) {
 		return arrHelper::getMultiStringValue($iHost['ip'])[0]??'';
 	}
 
