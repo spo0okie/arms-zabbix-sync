@@ -343,6 +343,12 @@ class rulesPipeline {
         return explode('@',$vmUUID)[0];
     }
 
+    public static function macroVmwareHostUuid($iHost) {
+        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.hostUUID']??'';
+        if (!strpos($vmUUID,'@')) return '';
+        return explode('@',$vmUUID)[0];
+    }
+
     public static function macroVmwareVcenter($iHost) {
         $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
         if (!strpos($vmUUID,'@')) return '';
