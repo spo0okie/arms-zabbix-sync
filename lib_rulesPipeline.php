@@ -26,6 +26,7 @@ class rulesPipeline {
         '${inventory:serviceman}'=>'macroInventoryServiceman',
         '${inventory:supportTeam}'=>'macroInventorySupportTeam',
         '${vmware:uuid}'=>'macroVmwareUuid',
+        '${vmware:hostuuid}'=>'macroVmwareHostUuid',
         '${vmware:vcenter}'=>'macroVmwareVcenter',
 	];
 
@@ -343,14 +344,17 @@ class rulesPipeline {
         return explode('@',$vmUUID)[0];
     }
 
-    public static function macroVmwareHostuuid($iHost) {
+    public static function macroVmwareHostUuid($iHost) {
         $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.hostUUID']??'';
         if (!strpos($vmUUID,'@')) return '';
         return explode('@',$vmUUID)[0];
     }
 
     public static function macroVmwareVcenter($iHost) {
-        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
+	    $links=inventoryApi::externalLinks($iHost);
+        $vmUUID='';
+        if (isset($links['VMWare.UUID'])) $vmUUID=$links['VMWare.UUID'];
+        if (isset($links['VMWare.hostUUID'])) $vmUUID=$links['VMWare.hostUUID'];
         if (!strpos($vmUUID,'@')) return '';
         return explode('@',$vmUUID)[1];
     }
