@@ -45,12 +45,15 @@ $tags=$inventory->getServiceSupportTags($svcID);
 $objTemplate=$zabbix->req('template.get',[
     "output"=>[
         "hostid",
-        'selectTags'=>['tag','value'],
     ],
+    'selectTags'=>['tag','value'],
     "filter"=>["host"=>$tplName]
 ]);
 
-if (is_null($tplId=$objTemplate[0]['templateid']??null)) exit(10);
+if (is_null($tplId=$objTemplate[0]['templateid']??null)) {
+	echo "Template \"$tplName\" not found\n";
+	exit(10);
+}
 
 
 //обновляем ответственных в шаблоне
