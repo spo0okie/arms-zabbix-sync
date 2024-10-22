@@ -721,6 +721,22 @@ class zabbixApi {
 			}
 		}
 
+		/* ipmi_username - single value */
+		if (isset($actions['ipmi_username'])){
+			$ipmi_username=reset($actions['ipmi_username']);
+			if (($zHost['ipmi_username']??'')!=$ipmi_username) {
+				$diff->ipmi_username=$ipmi_username;
+			}
+		}
+
+		/* ipmi_password - single value */
+		if (isset($actions['ipmi_password'])){
+			$ipmi_password=reset($actions['ipmi_password']);
+			if (($zHost['ipmi_password']??'')!=$ipmi_password) {
+				$diff->ipmi_password=$ipmi_password;
+			}
+		}
+
 		/* Host(name) - single value */
 		if (isset($actions['name'])){
 			$name=reset($actions['name']);
