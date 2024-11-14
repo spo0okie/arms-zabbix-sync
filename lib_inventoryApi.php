@@ -158,7 +158,7 @@ class inventoryApi {
 		$names=[];
 		$excludeNames=arrHelper::getItemsField($exclude,'Ename');
 		foreach (arrHelper::getItemsField($users,'Ename') as $name) {
-			if (array_search($name,$excludeNames))
+			if (array_search($name,$excludeNames)===false)
 				$names[]=explode(' ',$name)[0];
 		}
 		return implode(', ',array_unique($names));
