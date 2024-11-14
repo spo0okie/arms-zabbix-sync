@@ -148,13 +148,20 @@ class inventoryApi {
 		return $result;
 	}
 
-	public static function fetchUserNames($users) {
+	/**
+	 * Вытащить уникальные имена из пользователей (убрав лишних)
+	 * @param $users
+	 * @param array $exclude
+	 * @return string
+	 */
+	public static function fetchUserNames($users,$exclude=[]) {
 		$names=[];
+		$excludeNames=arrHelper::getItemsField($exclude,'Ename');
 		foreach (arrHelper::getItemsField($users,'Ename') as $name) {
-			//echo $name."\n";
-			$names[]=explode(' ',$name)[0];
+			if (array_search($name,$excludeNames))
+				$names[]=explode(' ',$name)[0];
 		}
-		return implode(', ',$names);
+		return implode(', ',array_unique($names));
 	}
 
 

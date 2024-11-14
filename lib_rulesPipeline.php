@@ -364,12 +364,15 @@ class rulesPipeline {
 	}
 
 	public static function macroInventoryServiceman($iHost) {
-		return inventoryApi::fetchUserNames([$iHost['responsible']]);
+		return inventoryApi::fetchUserNames([$iHost['responsible'],$iHost['serviceResponsible']]);
 	}
 
 	public static function macroInventorySupportTeam($iHost) {
 		//print_r($iHost['supportTeam']);
-		return inventoryApi::fetchUserNames($iHost['supportTeam']);
+		return inventoryApi::fetchUserNames(
+		    array_merge($iHost['supportTeam'],$iHost['serviceSupportTeam']),
+            [$iHost['responsible'],$iHost['serviceResponsible']]
+        );
 	}
 
 	/**
