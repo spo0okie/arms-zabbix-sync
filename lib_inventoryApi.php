@@ -44,7 +44,7 @@ class inventoryApi {
 		if (!is_null($service=$this->getCache('services',$id))) {
 			return $service;
 		}
-		$data=$this->req("/api/services/$id?expand=infrastructureResponsibleName,infrastructureSupportNames");
+		$data=$this->req("/api/services/$id?expand=infrastructureResponsibleName,infrastructureSupportNames,responsibleName,supportNames");
 		$obj=json_decode($data,true);
 		if (isset($obj['id'])) {
 			$this->setCache('services',$id,$obj);
@@ -166,9 +166,23 @@ class inventoryApi {
 	public function getServiceSupportTags($id) {
 		if (is_null($service=$this->getService($id))) return [];
 
+		$serviceMan=[];
+		$supportTeam=[];
+		foreach (static::cutFirstWords($service['infrastructureResponsibleName']) as $name)
+			$serviceMan[$name]=$name;
+
+		foreach (static::cutFirstWords($service['responsibleName']) as $name)
+			$serviceMan[$name]=$name;
+
+		foreach (static::cutFirstWords($service['infrastructureSupportNames']) as $name)
+			$supportTeam[$name]=$name;
+
+		foreach (static::cutFirstWords($service['supportNames']) as $name)
+			$supportTeam[$name]=$name;
+
 		return [
-			'serviceman'=>static::cutFirstWords($service['infrastructureResponsibleName']),
-			'supportteam'=>static::cutFirstWords($service['infrastructureSupportNames'])
+			'serviceman'=>array_values($serviceMan),
+			'supportteam'=>array_values($supportTeam)
 		];
 	}
 
