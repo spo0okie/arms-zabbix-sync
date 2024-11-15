@@ -539,18 +539,20 @@ class zabbixApi {
 			case 'jmx': $iface->type=4; break;
 		}
 
-		if (preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/',$addr)) {
-			//IP mode
-			$iface->useip=1;		//use DNS
-			$iface->ip=$addr;		//IP addr
-			$iface->dns="";			//DNS addr
-		} else {
-			//DNS mode
-			$iface->useip=0;				//use DNS
-			$iface->ip="";					//IP addr
-			$iface->dns=strtolower($addr);	//DNS addr
-		}
-		return $iface;
+		if (!isset($ifTemplate['ip']) && !isset($ifTemplate['dns'])) {
+            if (preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/',$addr)) {
+                //IP mode
+                $iface->ip=$addr;		//IP addr
+                $iface->dns="";			//DNS addr
+            } else {
+                //DNS mode
+                $iface->ip="";					//IP addr
+                $iface->dns=strtolower($addr);	//DNS addr
+            }
+        }
+        $iface->useip=strlen($iface->ip)?1:0;	//use DNS
+
+        return $iface;
 	}
 
 	/**
