@@ -500,25 +500,18 @@ class zabbixApi {
 	 * @param $interfaces
 	 */
 	static function setDefaultInterface(&$interfaces) {
-	    //ищем нет ли уже назначенного основного
-        $assigned=arrHelper::getItemByFields($interfaces,['main'=>1]);
-
-        if ($assigned===null){ //если нет
-            //находим наименьший тип интерфейса, его будем назначать по умолчанию
-            $mainType=min(arrHelper::getItemsField($interfaces,'type'));
-        } else { //выбираем его тип как по умолчанию
-            $mainType=$assigned->type;
-        }
-        $mainIsSet=false;
-
-		foreach ($interfaces as $key=>$interface) {
-			//если еще не назначен и тип нужный, то по умолчанию
-			if (!$mainIsSet && arrHelper::getField($interface,'type')==$mainType) {
-				$interfaces[$key]->main=1;
-				$mainIsSet=true;
-			} else {
-				$interfaces[$key]->main=0;
-			}
+	    //перебираем интерфейсы
+        foreach ($interfaces as $key=>$interface) {
+            //какой тип у ифейса
+            $type=arrHelper::getField($interface,'type');
+            //есть ли уже назначенный главный с таким типом?
+            $assigned=arrHelper::getItemByFields($interfaces,['main'=>1,'type'=>$type]);
+            //если еще не назначен или это он и есть то ставим главного
+            if ($assigned===null || $assigned['interfaceid']===$interface['interfaceid']) {
+                $interfaces[$key]->main=1;
+            } else { //иначе вторичный
+                $interfaces[$key]->main=0;
+            }
 		}
 	}
 
