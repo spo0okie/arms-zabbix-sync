@@ -508,7 +508,7 @@ class zabbixApi {
             $mainType=min(arrHelper::getItemsField($interfaces,'type'));
             $mainIsSet=false;
         } else { //выбираем его тип как по умолчанию
-            $mainType=$assigned['type'];
+            $mainType=$assigned->type;
         }
 
 		foreach ($interfaces as $key=>$interface) {
