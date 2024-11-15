@@ -507,7 +507,7 @@ class zabbixApi {
             //есть ли уже назначенный главный с таким типом?
             $assigned=arrHelper::getItemByFields($interfaces,['main'=>1,'type'=>$type]);
             //если еще не назначен или это он и есть то ставим главного
-            if ($assigned===null || $assigned['interfaceid']===$interface['interfaceid']) {
+            if ($assigned===null || arrHelper::getField($assigned,'interfaceid')===arrHelper::getField($interface,'interfaceid')) {
                 $interfaces[$key]->main=1;
             } else { //иначе вторичный
                 $interfaces[$key]->main=0;
