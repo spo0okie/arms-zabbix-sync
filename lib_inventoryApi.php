@@ -65,7 +65,7 @@ class inventoryApi {
 			$period_limit='&CompsSearch[updated_at]=>'.$today->format('Y-m-d');
 		} else $period_limit='';
 
-		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,servicesResponsible,fqdn,domain,site,supportTeam,servicesSupportTeam,sandbox,services'.$period_limit);
+		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,sandbox,services'.$period_limit);
 		$obj=json_decode($data,true);
 		//var_dump($data);
 		foreach ($obj as $comp) {
@@ -79,7 +79,7 @@ class inventoryApi {
 	 */
 	public function cacheTechs() {
 
-		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand=responsible,servicesResponsible,comp,site,supportTeam,servicesSupportTeam,stateName,type,model,manufacturer,services');
+		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand=responsible,comp,site,supportTeam,stateName,type,model,manufacturer,services');
 		$obj=json_decode($data,true);
 		foreach ($obj as $tech) {
 			$tech['class']='techs';
