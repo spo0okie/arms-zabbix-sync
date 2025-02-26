@@ -50,7 +50,7 @@ function verboseMsg($msg) {
 echo "Initializin Inventory API ... ";
 $inventory=new inventoryApi();
 $inventory->init($webInventory,$inventoryAuth);
-$inventory->cacheComps();
+$inventory->cacheComps(360);
 $inventory->cacheTechs();
 echo "complete\n";
 
@@ -72,7 +72,7 @@ echo "complete\n";
 foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
     //имя узла
     $hostName=$item['class']=='comps'?$item['fqdn']:$item['num'];
-
+	//echo "$hostName\n";
     //прогоняем узел через конвейер чтобы понять что с ним делать
 	$params=$pipeLine->pipeHost($item);
 
@@ -84,9 +84,11 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
 		verboseMsg("$hostName - ".implode('; ',$params['errors'])."\n");
     } elseif (isset($params['actions'])) {  //узлы где нужно что-то делать и нет ошибок
 		$actions=$params['actions'];
+		verboseMsg("$hostName - no errors\n");
 
 		//если этот узел нужно обновлять
 		if (array_search('update',$actions)!==false) {
+			verboseMsg("$hostName - actions:".implode(',',array_unique($actions))."\n");
 
 			$hostid=$pipeLine->findZabbixHostid($item);
 
@@ -111,9 +113,12 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
 
 				} else verboseMsg("$hostName - no create!\n");
 			} else {
+				verboseMsg("$hostName - zabbix hostid: $hostid\n");
 				$zHost=$zabbix->getHost($hostid);
 				//print_r($zHost); //exit;
 				$diff=$zabbix->applyPipelineActions($zHost,$params);
+				//print_r($zHost);
+				//print_r($params);
 				if (count(get_object_vars($diff))) {
 					echo  'UPDATE '. $hostName .': ';
 
@@ -126,7 +131,7 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
     					$zabbix->setHost($diff);
 					echo "\n";
 					//exit;
-                }
+                } else verboseMsg("$hostName - no chahges!\n");
 			}
 		} else verboseMsg("$hostName - no update!\n");
 	} else verboseMsg("$hostName - no actions!\n");

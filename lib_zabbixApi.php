@@ -816,9 +816,10 @@ class zabbixApi {
 
 
 		//обрабатываем пареметры которые применяем только на новый хост
-		if ($new) {
-			/* PSK - single value */
-			if (isset($actions['PSK'])) {
+		/* PSK - single value */
+		if (isset($actions['PSK'])) {
+			$psk=$actions['PSK'];
+			if (count($psk) && $zHost['tls_accept']==1) {
 				$identity='';
 				$PSK='';
 				foreach ($actions['PSK'] as $key=>$value) {
@@ -829,6 +830,9 @@ class zabbixApi {
 				static::diffSimpleField($zHost,'tls_connect',2,$diff);
 				static::diffSimpleField($zHost,'tls_psk_identity',$identity,$diff);
 				static::diffSimpleField($zHost,'tls_psk',$PSK,$diff);
+			} elseif (!count($psk) && $zHost['tls_accept']==2) {
+				static::diffSimpleField($zHost,'tls_accept',1,$diff);
+				static::diffSimpleField($zHost,'tls_connect',1,$diff);
 			}
 		}
 
