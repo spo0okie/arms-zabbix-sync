@@ -322,11 +322,17 @@ class rulesPipeline {
 
 	// МАКРОСЫ ========================================
 
-	public static function macroInventoryFqdn($iHost) {
-		return mb_strtolower($iHost['fqdn']);
-	}
+    public static function macroInventoryFqdn($iHost) {
+        return mb_strtolower($iHost['fqdn']);
+    }
 
-	public static function macroInventoryNum($iHost) {
+    public static function macroInventoryHostname($iHost) {
+	    if ($iHost['class']==='comps') return mb_strtolower($iHost['name']);
+        if ($iHost['class']==='techs') return mb_strtolower($iHost['hostname']);
+        return '';
+    }
+
+    public static function macroInventoryNum($iHost) {
 		return mb_strtoupper($iHost['num']);
 	}
 
@@ -375,7 +381,20 @@ class rulesPipeline {
         );
 	}
 
-	/**
+    public static function macroInventorySandboxId($iHost) {
+        return mb_strtoupper($iHost['sandbox_id']);
+    }
+
+    public static function macroInventorySandbox($iHost) {
+        return mb_strtoupper($iHost['sandbox']['name']);
+    }
+
+    public static function macroInventorySandboxSuffix($iHost) {
+        return mb_strtoupper($iHost['sandbox']['suffix']);
+    }
+
+
+    /**
 	 * Заменить макросы инвентаризации на реальные значения
 	 * @param $value
 	 * @param $iHost

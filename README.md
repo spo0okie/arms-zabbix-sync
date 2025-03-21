@@ -2,7 +2,7 @@
 Синхронизация Zabbix с узлами [Inventory](https://github.com/spo0okie/arms_inventory)
 
 ## Требования
-  * Zabbix 6.0 - 6.4
+  * Zabbix 7.0 - 7.2
   * [Inventory](https://github.com/spo0okie/arms_inventory) желательно последней версии
   * php не ниже 7.4
 
@@ -264,6 +264,7 @@ php ./sync.php real
     ]],
 ];
 ```
+  * ${inventory:hostname} - Hostname узла
   * ${inventory:fqdn} - FQDN узла
   * ${inventory:ip} - IP адрес узла
   * ${inventory:num} - ИНВ номер узла (маркировка ИТ отдела)
@@ -278,6 +279,18 @@ php ./sync.php real
     ],
 ];
 ```
+
+  * ${inventory:sandbox} - Имя песочницы в которой изолирован узел (если есть)
+  * ${inventory:sandboxId} - Имя песочницы в которой изолирован узел (если есть)
+  * ${inventory:sandboxSuffix} - Имя песочницы в которой изолирован узел (если есть)
+```php
+[// именование и адресация узлов
+    [//компьютеры именуем по FQDN и обращаемся также
+        ['type'=>'comps','sandbox'=>'*'],['name'=>'${inventory:hostname} (${inventory:sandboxSuffix})', 'host'=>'${inventory:ip}',],
+    ],
+];
+```
+
 
   * ${inventory:class} - Класс объекта в Inventory  
   * ${inventory:id} - ID объекта в Inventory (уникальный в пределах класса)  
