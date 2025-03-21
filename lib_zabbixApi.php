@@ -35,7 +35,7 @@ class zabbixApi {
 		$request->method=$method;
 		$request->params=$params;
 		$request->id=(string)rand(0,9999);
-		$request->auth=$this->authToken;
+		//$request->auth=$this->authToken;
 
 		$reqData=json_encode($request,JSON_UNESCAPED_UNICODE);
 		//echo(">".$data."\n");
@@ -43,7 +43,7 @@ class zabbixApi {
 		curl_setopt_array($reqCurl, [
 			CURLOPT_URL => $this->apiUrl,
 			CURLOPT_RETURNTRANSFER => true,
-			CURLOPT_HTTPHEADER=>['Content-type: application/json'],
+			CURLOPT_HTTPHEADER=>['Content-type: application/json',"Authorization: Bearer ".$this->authToken],
 			CURLOPT_POST => true,
 			CURLOPT_POSTFIELDS => $reqData,
 			CURLOPT_SSL_VERIFYPEER => false
@@ -749,10 +749,11 @@ class zabbixApi {
 
 		/* Proxy ID - single value */
 		if (isset($actions['proxy'])) {
-			$zProxy=$zHost['proxy_hostid']??0;
+			$zProxy=$zHost['proxyid']??0;
 			$aProxy=reset($actions['proxy']);
 			if ($zProxy!=$aProxy) {
-				$diff->proxy_hostid=$aProxy?$aProxy:null;
+				$diff->proxyid=$aProxy?$aProxy:null;
+				$diff->monitored_by=$aProxy?1:0;
 			}
 		}
 
@@ -819,7 +820,8 @@ class zabbixApi {
 		/* PSK - single value */
 		if (isset($actions['PSK'])) {
 			$psk=$actions['PSK'];
-			if (count($psk) && $zHost['tls_accept']==1) {
+			$tls_accept=isset($zHost['tls_accept'])?$zHost['tls_accept']:1;
+			if (count($psk) && $tls_accept==1) {
 				$identity='';
 				$PSK='';
 				foreach ($actions['PSK'] as $key=>$value) {

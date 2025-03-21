@@ -602,7 +602,7 @@ class rulesPipeline {
 					case 'host':
 					case 'name':
 					case 'status':
-					case 'proxy_hostid':
+					case 'proxyid':
 						$output.=strtoupper($property).': ' . ($zHost[$property] ?? 'unset') . '->' . $value . '; ';
 						break;
 					case 'tls_psk': break;
