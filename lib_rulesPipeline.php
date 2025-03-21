@@ -15,20 +15,24 @@ class rulesPipeline {
 	public $zabbixTemplates;
 	public $zabbixGroups;
 
-    const macroAny='*';
-    const macroNone=false;
+	const macroAny='*';
+	const macroNone=false;
 
 	static $inventoryMacros=[
 		'${inventory:fqdn}'=>'macroInventoryFqdn',
+		'${inventory:hostname}'=>'macroInventoryHostname',
 		'${inventory:num}'=>'macroInventoryNum',
 		'${inventory:class}'=>'macroInventoryClass',
 		'${inventory:id}'=>'macroInventoryId',
 		'${inventory:ip}'=>'macroInventoryIp',
-        '${inventory:serviceman}'=>'macroInventoryServiceman',
-        '${inventory:supportTeam}'=>'macroInventorySupportTeam',
-        '${vmware:uuid}'=>'macroVmwareUuid',
-        '${vmware:hostuuid}'=>'macroVmwareHostUuid',
-        '${vmware:vcenter}'=>'macroVmwareVcenter',
+		'${inventory:serviceman}'=>'macroInventoryServiceman',
+		'${inventory:supportTeam}'=>'macroInventorySupportTeam',
+		'${inventory:sandbox}'=>'macroInventorySandbox',
+		'${inventory:sandboxId}'=>'macroInventorySandboxId',
+		'${inventory:sandboxSuffix}'=>'macroInventorySandboxSuffix',
+		'${vmware:uuid}'=>'macroVmwareUuid',
+		'${vmware:hostuuid}'=>'macroVmwareHostUuid',
+		'${vmware:vcenter}'=>'macroVmwareVcenter',
 	];
 
 	public function init($zabbix,$inventory,$rules){
@@ -95,9 +99,9 @@ class rulesPipeline {
 			//если в качестве условия указано * - значит нужен просто любой сервис
 			return (boolean)(count($hostServices));
 		} elseif (array_search(static::macroNone,$services)!==false) {
-            //если в качестве условия указано FALSE - значит нужно отсутствие любого сервиса
-            return !(boolean)(count($hostServices));
-        } else {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любого сервиса
+			return !(boolean)(count($hostServices));
+		} else {
 			$svcNames=arrHelper::getItemsField($hostServices,'name');
 			return (boolean)(count(array_intersect($services,$svcNames)));
 		}
@@ -221,46 +225,46 @@ class rulesPipeline {
 		return (boolean)$iHost['archived'] == (boolean)$status;
 	}
 
-    /**
-     * Проверка соответствия песочницы ОС из инвентори набору $sandboxes
-     * @param $sandboxes
-     * @param $iHost
-     * @return boolean
-     */
-    public static function conditionSandbox($sandboxes,$iHost) {
-        $sandbox=trim($iHost['sandbox']['name']??'!none_found');
-        if (!is_array($sandboxes)) $sandboxes=[$sandboxes];
-        if (array_search(static::macroAny,$sandboxes)!==false) {
-            //если в качестве условия указано * - значит нужен просто любая песочница
-            return $sandbox!=='!none_found';
-        } elseif (array_search(static::macroNone,$sandboxes)!==false) {
-            //если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
-            return $sandbox==='!none_found';
-        } else {
-            return array_search($sandbox,$sandboxes)!==false;
-        }
-    }
+	/**
+	 * Проверка соответствия песочницы ОС из инвентори набору $sandboxes
+	 * @param $sandboxes
+	 * @param $iHost
+	 * @return boolean
+	 */
+	public static function conditionSandbox($sandboxes,$iHost) {
+		$sandbox=trim($iHost['sandbox']['name']??'!none_found');
+		if (!is_array($sandboxes)) $sandboxes=[$sandboxes];
+		if (array_search(static::macroAny,$sandboxes)!==false) {
+			//если в качестве условия указано * - значит нужен просто любая песочница
+			return $sandbox!=='!none_found';
+		} elseif (array_search(static::macroNone,$sandboxes)!==false) {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+			return $sandbox==='!none_found';
+		} else {
+			return array_search($sandbox,$sandboxes)!==false;
+		}
+	}
 
-    /**
-     * Проверка наличия внешних узлов
-     * @param $links
-     * @param $iHost
-     * @return boolean
-     */
-    public static function conditionExtlink($links,$iHost) {
-        $jsonLinks=inventoryApi::externalLinks($iHost);
-        if (array_search(static::macroAny,$links)!==false) {
-            //если в качестве условия указано * - значит нужен просто любая ссылка
-            return count($jsonLinks);
-        } elseif (array_search(static::macroNone,$links)!==false) {
-            //если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
-            return !count($jsonLinks);
-        } else {
-            return count(array_intersect(array_keys($jsonLinks),$links));
-        }
-    }
+	/**
+	 * Проверка наличия внешних узлов
+	 * @param $links
+	 * @param $iHost
+	 * @return boolean
+	 */
+	public static function conditionExtlink($links,$iHost) {
+		$jsonLinks=inventoryApi::externalLinks($iHost);
+		if (array_search(static::macroAny,$links)!==false) {
+			//если в качестве условия указано * - значит нужен просто любая ссылка
+			return count($jsonLinks);
+		} elseif (array_search(static::macroNone,$links)!==false) {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+			return !count($jsonLinks);
+		} else {
+			return count(array_intersect(array_keys($jsonLinks),$links));
+		}
+	}
 
-    // ОБХОД наборов правил
+	// ОБХОД наборов правил
 
 	/**
 	 * Проверяет соответствия узла условию
@@ -323,17 +327,17 @@ class rulesPipeline {
 
 	// МАКРОСЫ ========================================
 
-    public static function macroInventoryFqdn($iHost) {
-        return mb_strtolower($iHost['fqdn']);
-    }
+	public static function macroInventoryFqdn($iHost) {
+		return mb_strtolower($iHost['fqdn']);
+	}
 
-    public static function macroInventoryHostname($iHost) {
-	    if ($iHost['class']==='comps') return mb_strtolower($iHost['name']);
-        if ($iHost['class']==='techs') return mb_strtolower($iHost['hostname']);
-        return '';
-    }
+	public static function macroInventoryHostname($iHost) {
+		if ($iHost['class']==='comps') return mb_strtolower($iHost['name']);
+		if ($iHost['class']==='techs') return mb_strtolower($iHost['hostname']);
+		return '';
+	}
 
-    public static function macroInventoryNum($iHost) {
+	public static function macroInventoryNum($iHost) {
 		return mb_strtoupper($iHost['num']);
 	}
 
@@ -345,28 +349,28 @@ class rulesPipeline {
 		return $iHost['id'];
 	}
 
-    public static function macroVmwareUuid($iHost) {
-        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
-        if (!strpos($vmUUID,'@')) return '';
-        return explode('@',$vmUUID)[0];
-    }
+	public static function macroVmwareUuid($iHost) {
+		$vmUUID=inventoryApi::externalLinks($iHost)['VMWare.UUID']??'';
+		if (!strpos($vmUUID,'@')) return '';
+		return explode('@',$vmUUID)[0];
+	}
 
-    public static function macroVmwareHostUuid($iHost) {
-        $vmUUID=inventoryApi::externalLinks($iHost)['VMWare.hostUUID']??'';
-        if (!strpos($vmUUID,'@')) return '';
-        return explode('@',$vmUUID)[0];
-    }
+	public static function macroVmwareHostUuid($iHost) {
+		$vmUUID=inventoryApi::externalLinks($iHost)['VMWare.hostUUID']??'';
+		if (!strpos($vmUUID,'@')) return '';
+		return explode('@',$vmUUID)[0];
+	}
 
-    public static function macroVmwareVcenter($iHost) {
-	    $links=inventoryApi::externalLinks($iHost);
-        $vmUUID='';
-        if (isset($links['VMWare.UUID'])) $vmUUID=$links['VMWare.UUID'];
-        if (isset($links['VMWare.hostUUID'])) $vmUUID=$links['VMWare.hostUUID'];
-        if (!strpos($vmUUID,'@')) return '';
-        return explode('@',$vmUUID)[1];
-    }
+	public static function macroVmwareVcenter($iHost) {
+		$links=inventoryApi::externalLinks($iHost);
+		$vmUUID='';
+		if (isset($links['VMWare.UUID'])) $vmUUID=$links['VMWare.UUID'];
+		if (isset($links['VMWare.hostUUID'])) $vmUUID=$links['VMWare.hostUUID'];
+		if (!strpos($vmUUID,'@')) return '';
+		return explode('@',$vmUUID)[1];
+	}
 
-    public static function macroInventoryIp($iHost) {
+	public static function macroInventoryIp($iHost) {
 		return arrHelper::getMultiStringValue($iHost['ip'])[0]??'';
 	}
 
@@ -377,25 +381,25 @@ class rulesPipeline {
 	public static function macroInventorySupportTeam($iHost) {
 		//print_r($iHost['supportTeam']);
 		return inventoryApi::fetchUserNames(
-		    array_merge($iHost['supportTeam']),
-            [$iHost['responsible']]
-        );
+			array_merge($iHost['supportTeam']),
+			[$iHost['responsible']]
+		);
 	}
 
-    public static function macroInventorySandboxId($iHost) {
-        return mb_strtoupper($iHost['sandbox_id']);
-    }
+	public static function macroInventorySandboxId($iHost) {
+		return mb_strtoupper($iHost['sandbox_id']);
+	}
 
-    public static function macroInventorySandbox($iHost) {
-        return mb_strtoupper($iHost['sandbox']['name']);
-    }
+	public static function macroInventorySandbox($iHost) {
+		return mb_strtoupper($iHost['sandbox']['name']);
+	}
 
-    public static function macroInventorySandboxSuffix($iHost) {
-        return mb_strtoupper($iHost['sandbox']['suffix']);
-    }
+	public static function macroInventorySandboxSuffix($iHost) {
+		return mb_strtoupper($iHost['sandbox']['suffix']);
+	}
 
 
-    /**
+	/**
 	 * Заменить макросы инвентаризации на реальные значения
 	 * @param $value
 	 * @param $iHost
@@ -663,33 +667,33 @@ class rulesPipeline {
 
 		if ($hostId===false) return false;
 
-        //обработка на случай дублей FQDN изза песочниц
-        //мы можем тут получить hostId клона машины, которая была найдена не по inventory_id, а по FQDN
-        //если у этого узла есть inventory_id, и он указывает не на тот хост который мы сейчас обрабатываем,
-        //а на другой, который нам тоже надо обработать - считай мы не нашли нужный узел в Zabbix. Потому что тот,
-        //который мы нашли - это тоже нужный нам, мы не можем его перепривязать
+		//обработка на случай дублей FQDN изза песочниц
+		//мы можем тут получить hostId клона машины, которая была найдена не по inventory_id, а по FQDN
+		//если у этого узла есть inventory_id, и он указывает не на тот хост который мы сейчас обрабатываем,
+		//а на другой, который нам тоже надо обработать - считай мы не нашли нужный узел в Zabbix. Потому что тот,
+		//который мы нашли - это тоже нужный нам, мы не можем его перепривязать
 
-        $zHost=$this->zabbixApi->getHost($hostId);
+		$zHost=$this->zabbixApi->getHost($hostId);
 
-        if ($inventoryClass=zabbixApi::getMacroValue($zHost['macros'],'{$INVENTORY_CLASS}')) {
-            //мы нашли какой то узел привязанный к инвентори но к другому классу устройств
-            if ($inventoryClass!=='comps') return false;    // - считай нашли не то
-            //класс comps
+		if ($inventoryClass=zabbixApi::getMacroValue($zHost['macros']??[],'{$INVENTORY_CLASS}')) {
+			//мы нашли какой то узел привязанный к инвентори но к другому классу устройств
+			if ($inventoryClass!=='comps') return false;	// - считай нашли не то
+			//класс comps
 
-            //есть ссылка на ID компа?
-            if ($inventoryId=zabbixApi::getMacroValue($zHost['macros'],'{$INVENTORY_ID}')) {
-                //если ссылаемся на искомый хост - успех
-                if ( (int)$iHost['id']===(int)$inventoryId) return $hostId;
+			//есть ссылка на ID компа?
+			if ($inventoryId=zabbixApi::getMacroValue($zHost['macros'],'{$INVENTORY_ID}')) {
+				//если ссылаемся на искомый хост - успех
+				if ( (int)$iHost['id']===(int)$inventoryId) return $hostId;
 
-                //если комп на который ссылается забикс не найден в инвентори - то норм. считай нашли.
-                if (!($iHost2=$this->inventoryApi->getComp($inventoryId))) return $hostId;
+				//если комп на который ссылается забикс не найден в инвентори - то норм. считай нашли.
+				if (!($iHost2=$this->inventoryApi->getComp($inventoryId))) return $hostId;
 
-                //на этом этапе у нас найден в заббиксе объект, который ссылается на другой КОМП в инвентори и он там есть
-                //такое отдавать нельзя - будет драка между узлами инвентори за этот заббикс узел
-                return false;
-            }
-        }
-        return $hostId;
+				//на этом этапе у нас найден в заббиксе объект, который ссылается на другой КОМП в инвентори и он там есть
+				//такое отдавать нельзя - будет драка между узлами инвентори за этот заббикс узел
+				return false;
+			}
+		}
+		return $hostId;
 	}
 
 	/**
