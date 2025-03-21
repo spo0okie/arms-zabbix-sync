@@ -5,6 +5,7 @@
 //v3.1 - поиск аналогичного хоста в других доменах, если нет в искомом
 //v4 - 
 
+require_once 'lib_zabbixApi.php';
 
 class rulesPipeline {
 
@@ -649,23 +650,46 @@ class rulesPipeline {
 	 * @return mixed
 	 */
 	public function findCompsZabbixHostid($iHost) {
-		//ищем его в заббикс
-		if (($hostid = $this->zabbixApi->searchHostByMacros([
+		//ищем его в заббикс по inventoryId
+		if (($hostId = $this->zabbixApi->searchHostByMacros([
 			'{$INVENTORY_ID}' => $iHost['id'],
 			'{$INVENTORY_CLASS}' => 'comps',
 			'{$INVENTORY_URL}' => $this->inventoryApi->apiUrl,
 		]))!==false) {
-			return $hostid;
+			return $hostId;
 		}
 
-		if (($hostid = $this->zabbixApi->searchHostByMacros([
-			'{$INVENTORY.COMP_ID}' => $iHost['id'],
-			'{$INVENTORY.URL}' => $this->inventoryApi->apiUrl,
-		]))!==false) {
-			return $hostid;
-		}
+		$hostId=$this->zabbixApi->searchHostFqdn($iHost['fqdn']);
 
-		return $this->zabbixApi->searchHostFqdn($iHost['fqdn']);
+		if ($hostId===false) return false;
+
+        //обработка на случай дублей FQDN изза песочниц
+        //мы можем тут получить hostId клона машины, которая была найдена не по inventory_id, а по FQDN
+        //если у этого узла есть inventory_id, и он указывает не на тот хост который мы сейчас обрабатываем,
+        //а на другой, который нам тоже надо обработать - считай мы не нашли нужный узел в Zabbix. Потому что тот,
+        //который мы нашли - это тоже нужный нам, мы не можем его перепривязать
+
+        $zHost=$this->zabbixApi->getHost($hostId);
+
+        if ($inventoryClass=zabbixApi::getMacroValue($zHost['macros'],'{$INVENTORY_CLASS}')) {
+            //мы нашли какой то узел привязанный к инвентори но к другому классу устройств
+            if ($inventoryClass!=='comps') return false;    // - считай нашли не то
+            //класс comps
+
+            //есть ссылка на ID компа?
+            if ($inventoryId=zabbixApi::getMacroValue($zHost['macros'],'{$INVENTORY_ID}')) {
+                //если ссылаемся на искомый хост - успех
+                if ( (int)$iHost['id']===(int)$inventoryId) return $hostId;
+
+                //если комп на который ссылается забикс не найден в инвентори - то норм. считай нашли.
+                if (!($iHost2=$this->inventoryApi->getComp($inventoryId))) return $hostId;
+
+                //на этом этапе у нас найден в заббиксе объект, который ссылается на другой КОМП в инвентори и он там есть
+                //такое отдавать нельзя - будет драка между узлами инвентори за этот заббикс узел
+                return false;
+            }
+        }
+        return $hostId;
 	}
 
 	/**
