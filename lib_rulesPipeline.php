@@ -717,9 +717,16 @@ class rulesPipeline {
 			return $hostId;
 		}
 
-		return $this->zabbixApi->searchHostByIps(arrHelper::getMultiStringValue($iHost['ip']));
+        if ($iHost['fqdn']) {
+            $hostId=$this->zabbixApi->searchHostFqdn($iHost['fqdn']);
+            if ($hostId!==false) {
+                //echo "found ".$iHost['num']." by FQDN \n";
+                return $hostId;
+            }
+        }
 
-	}
+        return $this->zabbixApi->searchHostByIps(arrHelper::getMultiStringValue($iHost['ip']));
+    }
 
 	/**
 	 * Ищет узел в заббикс соответствующий узлу в инвентори
