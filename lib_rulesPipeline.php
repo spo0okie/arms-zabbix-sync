@@ -60,7 +60,12 @@ class rulesPipeline {
 	 */
 	public static function conditionFqdn($names,$iHost) {
 		if (!is_array($names)) $names=[$names];
-		return array_search(strtolower($iHost['fqdn']??'!nofqdn'),$names)!==false;
+        if (array_search(static::macroAny,$names)!==false) {
+            //если в качестве условия указано * - значит нужен просто любой не пустой FQDN
+            return (boolean)($iHost['fqdn'] ?? '');
+        }
+
+        return array_search(strtolower($iHost['fqdn']??'!nofqdn'),$names)!==false;
 	}
 
 	/**
