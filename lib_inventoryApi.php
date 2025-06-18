@@ -79,7 +79,7 @@ class inventoryApi {
 	 */
 	public function cacheTechs() {
 
-		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand=responsible,comp,site,supportTeam,stateName,type,model,manufacturer,services,fqdn');
+		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand=responsible,comp,site,supportTeam,stateName,type,model,manufacturer,services,fqdn,itStaff');
 		$obj=json_decode($data,true);
 		foreach ($obj as $tech) {
 			$tech['class']='techs';
