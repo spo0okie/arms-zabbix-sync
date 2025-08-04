@@ -156,18 +156,30 @@ class rulesPipeline {
 		return array_search($iHost['domain']['name']??'!nodomain',$names)!==false;
 	}
 
-	/**
-	 * Проверка соответствия состояния узла инвентори набору $states
-	 * @param $states
-	 * @param $iHost
-	 * @return boolean
-	 */
-	public static function conditionState($states,$iHost) {
-		if (!is_array($states)) $states=[$states];
-		return array_search($iHost['stateName']??'!nostate',$states)!==false;
-	}
+    /**
+     * Проверка соответствия состояния узла инвентори набору $states
+     * @param $states
+     * @param $iHost
+     * @return boolean
+     */
+    public static function conditionState($states,$iHost) {
+        if (!is_array($states)) $states=[$states];
+        return array_search($iHost['stateName']??'!nostate',$states)!==false;
+    }
 
-	/**
+    /**
+     * Проверка соответствия состояния узла инвентори набору $states
+     * @param $states
+     * @param $iHost
+     * @return boolean
+     */
+    public static function conditionArmState($states,$iHost) {
+        if (!is_array($states)) $states=[$states];
+        return array_search($iHost['arm']['stateName']??'!nostate',$states)!==false;
+    }
+
+
+    /**
 	 * Проверка соответствия класса/типа узла инвентори набору $types
 	 * @param $types
 	 * @param $iHost

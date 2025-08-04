@@ -65,7 +65,7 @@ class inventoryApi {
 			$period_limit='&CompsSearch[updated_at]=>'.$today->format('Y-m-d');
 		} else $period_limit='';
 
-		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,sandbox,services'.$period_limit);
+		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,sandbox,services,arm.stateName'.$period_limit);
 		$obj=json_decode($data,true);
 		//var_dump($data);
 		foreach ($obj as $comp) {
