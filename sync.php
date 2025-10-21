@@ -32,11 +32,7 @@ require_once dirname(__FILE__).'/lib_inventoryApi.php';
 require_once dirname(__FILE__).'/lib_arrHelper.php';
 require_once dirname(__FILE__).'/lib_rulesPipeline.php';
 
-$errorsList=[
-	'noSite'=>[],
-	'noOs'=>[],
-	'createdOK'=>[]
-];
+$errorsList=[];
 
 $dryRun=!(array_search('real',$argv)!==false);
 $verbose=(array_search('verbose',$argv)!==false);
@@ -73,7 +69,7 @@ foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
     //имя узла
     $hostName=$item['class']=='comps'?$item['fqdn']:$item['num'];
 	//echo "$hostName\n";
-    //прогоняем узел через конвейер чтобы понять что с ним делать
+    //прогоняем узел через конвейер, чтобы понять что с ним делать
 	$params=$pipeLine->pipeHost($item);
 
 	//если получили какие-то параметры, то смотрим есть ли actions и нет ли ошибок
