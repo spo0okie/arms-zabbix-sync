@@ -99,7 +99,11 @@ class rulesPipeline {
 	 */
 	public static function conditionService($services,$iHost) {
 		if (!is_array($services)) $services=[$services];
-		$hostServices=$iHost['services']??[];;
+		$hostServices=$iHost['services']??[];
+        //убираем архивированные сервисы
+        foreach ($hostServices as $i=>$service) {
+            if ($service['archived']??false) unset($hostServices[$i]);
+        }
 		if (array_search(static::macroAny,$services)!==false) {
 			//если в качестве условия указано * - значит нужен просто любой сервис
 			return (boolean)(count($hostServices));
