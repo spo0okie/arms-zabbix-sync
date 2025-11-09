@@ -69,34 +69,4 @@ foreach ($objTrigger as $trigger) {
 //	exit(0);
 }
 
-
-
-
-
-
-$tags=$inventory->getServiceSupportTags($svcID);
-
-//получаем шаблон с тегами
-$objTemplate=$zabbix->req('template.get',[
-    "output"=>[
-        "hostid",
-        'selectTags'=>['tag','value'],
-    ],
-    "filter"=>["host"=>$tplName]
-]);
-
-if (is_null($tplId=$objTemplate[0]['templateid']??null)) exit(10);
-
-
-//обновляем ответственных в шаблоне
-$tplTags=zabbixApi::updateTags($objTemplate[0]['tags']??[],$tags);
-echo "Updating '$tplName' tags with ".zabbixApi::printTags($tplTags)."\n";
-$objTriggers=$zabbix->req('template.update',[
-    'templateid'=>$tplId,
-    'tags'=>zabbixApi::updateTags($tplTags,$tags)
-]);
-
-
-//получаем все триггеры шаблона
-
 ?>
