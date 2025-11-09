@@ -53,85 +53,141 @@ echo "complete\n";
 echo "Loading Zabbix hosts ... ";
 	$zabbix=new zabbixApi();
 	$zabbix->init($zabbixApiUrl,$zabbixAuth,[
-        'inventory'=>$inventory
-    ]);
+		'inventory'=>$inventory
+	]);
 echo "complete\n";
 
 //print_r($zabbix->cache['hosts']); exit;
 
 echo "Loading Pipeline ... ";
-    $pipeLine=new rulesPipeline();
-    $pipeLine->init($zabbix,$inventory,require __DIR__.'/rules.priv.php');
+	$pipeLine=new rulesPipeline();
+	$pipeLine->init($zabbix,$inventory,require __DIR__.'/rules.priv.php');
 echo "complete\n";
 
-//обходим оборудование и ОС
-foreach (array_merge($inventory->getComps(),$inventory->getTechs()) as $item) {
-    //имя узла
-    $hostName=$item['class']=='comps'?$item['fqdn']:$item['num'];
-	//echo "$hostName\n";
-    //прогоняем узел через конвейер, чтобы понять что с ним делать
-	$params=$pipeLine->pipeHost($item);
+$processedItems = [];
+$techStacks = [];
 
-	//если получили какие-то параметры, то смотрим есть ли actions и нет ли ошибок
-	if (!count($params)) {  //пропускаем узлы у которых ничего не нужно делать
+// Проходим по всем элементам из inventory
+foreach (array_merge($inventory->getComps(), $inventory->getTechs()) as $item) {
+	$hostName = $item['class'] == 'comps' ? $item['fqdn'] : $item['num'];
+	$params = $pipeLine->pipeHost($item);
+
+	// Пропускаем элементы без параметров
+	if (!count($params)) {
 		verboseMsg("$hostName - no pipeline output\n");
-    } elseif (isset($params['errors'])) {    //пропускаем узлы с ошибками
-		if (!is_array($params['errors'])) $params['errors']=[$params['errors']];
-		verboseMsg("$hostName - ".implode('; ',$params['errors'])."\n");
-    } elseif (isset($params['actions'])) {  //узлы где нужно что-то делать и нет ошибок
-		$actions=$params['actions'];
-		verboseMsg("$hostName - no errors\n");
+		continue;
+	}
 
-		//если этот узел нужно обновлять
-		if (array_search('update',$actions)!==false) {
-			verboseMsg("$hostName - actions:".implode(',',array_unique($actions))."\n");
+	// или с ошибками
+	if (isset($params['errors'])) {
+		verboseMsg("$hostName - " . implode('; ', (array)$params['errors']) . "\n");
+		continue;
+	}
 
-			$hostid=$pipeLine->findZabbixHostid($item);
+	// или с которыми ничего не надо делать
+	if (!isset($params['actions'])) {
+		verboseMsg("$hostName - no actions!\n");
+		continue;
+	}
 
-            //Узел есть в заббикс?
-            if (!$hostid) {
-				//не нашли в заббиксе, а нужно ли создавать?
-				if (array_search('create',$actions)!==false) {
-					$diff=$zabbix->applyPipelineActions([],$params,true);
-                    if (count(get_object_vars($diff))) {
-                        //print_r($params); exit;
-                        echo  'CREATE '.$hostName .': ';
+	// Проверяем уникальность только для оборудования (class == 'techs')
+	if ($item['class'] == 'techs') {
+		$stackId = $item['model']['name'] . '|' . $item['ip'];
 
-                        if (strlen($changes=$pipeLine->printDiff($diff,[]))) echo $changes;
+		// Если ключ еще не существует, или его ['num'] больше текущего,
+		// то обновляем его текущим
+		if (!isset($techStacks[$stackId])) $techStacks[$stackId]=[];
+		$techStacks[$stackId][]=['item' => $item, 'params' => $params];
 
-                        if ($dryRun)
-                            echo "- [dry run] skip";
-                        else
-                            $zabbix->setHost($diff);
-                        echo "\n";
-                        //exit;
-                    }
-
-				} else verboseMsg("$hostName - no create!\n");
-			} else {
-				verboseMsg("$hostName - zabbix hostid: $hostid\n");
-				$zHost=$zabbix->getHost($hostid);
-				//print_r($zHost); //exit;
-				$diff=$zabbix->applyPipelineActions($zHost,$params);
-				//print_r($zHost);
-				//print_r($params);
-				if (count(get_object_vars($diff))) {
-					echo  'UPDATE '. $hostName .': ';
-
-					if (strlen($changes=$pipeLine->printDiff($diff,$zHost))) echo $changes;
-
-					$diff->hostid=$zHost['hostid'];
-					if ($dryRun)
-						echo "- [dry run] skip";
-					else
-    					$zabbix->setHost($diff);
-					echo "\n";
-					//exit;
-                } else verboseMsg("$hostName - no chahges!\n");
-			}
-		} else verboseMsg("$hostName - no update!\n");
-	} else verboseMsg("$hostName - no actions!\n");
+	} else {
+		// Для других классов добавляем элемент без проверки уникальности
+		$processedItems[] = ['item' => $item, 'params' => $params];
+	}
 }
+
+// Добавляем уникальные элементы оборудования в итоговый массив
+foreach ($techStacks as $stack) {
+
+	//не настоящий стек
+	if (count($stack)===1) {
+		$processedItems[] = $stack[0];
+		continue;
+	}
+
+	//настоящий стек, сортируем по имени
+	usort($stack, fn($a, $b)=>strcmp($a['item']['num'], $b['item']['num']));
+	//мастер тот у кого имя меньше всех
+	$master=array_shift($stack);
+
+	echo "Stack found: [{$master['item']['num']}], ".implode(', ', array_map(fn($e) => $e['item']['num'], $stack))."\n";
+
+	$processedItems[] = $master;
+	foreach ($stack as $tech) {
+		$tech['params']=['actions' => ['update'], 'status' => [1]];   //можем только обновить статус на ВЫКЛ
+		$processedItems[]=$tech;
+	}
+
+}
+
+// Этап 2: Сверка с Zabbix и выполнение действий
+$zabbixProcessed=[];	//для хранения обработанных в zabbix
+foreach ($processedItems as $entry) {
+	$item = $entry['item'];
+	$params = $entry['params'];
+	$hostName = $item['class'] == 'comps' ? $item['fqdn'] : $item['num'];
+	$actions = $params['actions'] ?? [];
+
+	//если этот узел нужно обновлять
+	if (in_array('update', $actions) || in_array('create', $actions)) {
+		$hostid = $pipeLine->findZabbixHostid($item);
+
+		//Узел есть в заббикс?
+		if (!$hostid ) {
+
+			//не нашли в заббиксе, а нужно ли создавать?
+			if (!in_array('create', $actions)) {
+				verboseMsg("$hostName - no create!\n"); continue;
+			}
+
+			$diff = $zabbix->applyPipelineActions([], $params, true);
+
+			//есть что создавать
+			if (!count(get_object_vars($diff))) {
+				verboseMsg("$hostName - nothing to create!\n"); continue;
+			}
+
+			echo 'CREATE ' . $hostName . ': '.$pipeLine->printDiff($diff, []);
+			if ($dryRun)
+				echo "- [dry run] skip";
+			else
+				$zabbix->setHost($diff);
+			echo "\n";
+
+		} else {
+			if (in_array($hostid,$zabbixProcessed)) {
+				echo "$hostName - [already processed] inventory -> zabbix search collision skip\n";
+				continue;
+			}
+			$zabbixProcessed[]=$hostid;
+			$zHost = $zabbix->getHost($hostid);
+			$diff = $zabbix->applyPipelineActions($zHost, $params);
+
+			if (!count(get_object_vars($diff))) {
+				verboseMsg("$hostName - no changes\n"); continue;
+			}
+
+			echo 'UPDATE ' . $hostName . ': '. $pipeLine->printDiff($diff, $zHost);
+			$diff->hostid = $zHost['hostid'];
+			if ($dryRun)
+				echo "- [dry run] skip";
+			else
+				$zabbix->setHost($diff);
+			echo "\n";
+		}
+	}
+}
+
+
 echo "script done.\n";
 exit();
 
