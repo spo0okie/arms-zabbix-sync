@@ -443,15 +443,13 @@ class rulesPipeline {
 	}
 
 	public static function macroInventoryServiceman($iHost) {
-		return inventoryApi::fetchUserNames([$iHost['responsible']]);
+		return inventoryApi::fetchUserNames([$iHost['responsible']??'']);
 	}
 
 	public static function macroInventorySupportTeam($iHost) {
-		//print_r($iHost['supportTeam']);
-		return inventoryApi::fetchUserNames(
-			array_merge($iHost['supportTeam']),
-			[$iHost['responsible']]
-		);
+		$team=$iHost['supportTeam'];
+		if (is_object($responsible=$iHost['responsible']??null)) $team[]=$responsible;
+		return inventoryApi::fetchUserNames($team);
 	}
 
 	public static function macroInventorySandboxId($iHost) {
