@@ -317,9 +317,9 @@ class rulesPipeline {
 	 */
 	public static function conditionTeamLogins($teammates,$iHost) {
 		$team=[];
-		if (is_object($iHost['responsible']??null)) $team[]=$iHost['responsible']['login'];
+		if (is_object($iHost['responsible']??null)) $team[]=$iHost['responsible']['Login'];
 		if (is_array($iHost['supportTeam'])&&count($iHost['supportTeam'])) {
-			foreach ($iHost['supportTeam'] as $mate) $team[]=$mate['login'];
+			foreach ($iHost['supportTeam'] as $mate) $team[]=$mate['Login'];
 		}
 		if (!is_array($teammates)) $teammates=[$teammates];
 		if (array_search(static::macroAny,$teammates)!==false) {
