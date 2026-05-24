@@ -647,6 +647,15 @@ class rulesPipeline {
 		return (implode(',',$output));
 	}
 
+	public function printDiffGroups($from,$to) {
+		$removed=array_diff($from,$to);
+		$added=array_diff($to,$from);
+		$output=[];
+		foreach ($removed as $groupId) $output[]='-'.($this->zabbixGroups[$groupId] ?? "#$groupId");
+		foreach ($added as $groupId) $output[]='+'.(  $this->zabbixGroups[$groupId] ?? "#$groupId");
+		return (implode(',',$output));
+	}
+
 	public function printDiffMacros($values) {
 		$output=[];
 		foreach ($values as $macro)
@@ -703,6 +712,12 @@ class rulesPipeline {
 						$output.=strtoupper($property) . ': ' . $this->printDiffTemplates(
 								zabbixApi::getTemplateIds($zHost),
 								zabbixApi::getTemplateIds($diff,'templates')
+							) . '; ';
+						break;
+					case 'groups':
+						$output.=strtoupper($property) . ': ' . $this->printDiffGroups(
+								zabbixApi::getGroupIds($zHost),
+								zabbixApi::getGroupIds($diff,'groups')
 							) . '; ';
 						break;
 					default:
