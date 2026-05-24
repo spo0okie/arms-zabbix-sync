@@ -1,6 +1,7 @@
 #!/usr/bin/php
 <?php
 /*
+v6.2	+ поддержка условия "поддерживается сотрудником"
 v6.1	+ verbose mode
 v6		* режим "конвейера/конвертера" узлов инвентори->zabbix
 v5.1	+ синхронизация тегов
@@ -17,11 +18,11 @@ v1		+ поиск узлов inventory в zabbix
 */
 
 /**
- * @var $webInventory string
- * @var $webInventoryAuth string
- * @var $zabbixApiUrl string
- * @var $zabbixAuth string
- * @var $inventoryAuth string
+ * @var string $webInventory
+ * @var string $webInventoryAuth
+ * @var string $zabbixApiUrl
+ * @var string $zabbixAuth
+ * @var string $inventoryAuth
  */
 
 $inventoryCache=[];

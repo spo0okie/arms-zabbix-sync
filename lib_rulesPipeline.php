@@ -3,7 +3,7 @@
 //v2 - загрузка всех узлов zabbix сразу (для скорости)
 //v3 - филтрация по домену
 //v3.1 - поиск аналогичного хоста в других доменах, если нет в искомом
-//v4 - 
+//v4 -
 
 require_once 'lib_zabbixApi.php';
 
@@ -283,6 +283,53 @@ class rulesPipeline {
 		} else {
 			return count(array_intersect(array_keys($jsonLinks),$links));
 		}
+	}
+
+
+	/**
+	 * Проверка соответствия ФИО члена команды сопровождения из инвентори набору $teammates
+	 * @param $teammates
+	 * @param $iHost
+	 * @return boolean
+	 */
+	public static function conditionTeamNames($teammates,$iHost) {
+		$team=[];
+		if (is_object($iHost['responsible'])) $team[]=$iHost['responsible']['Ename'];
+		if (is_array($iHost['supportTeam'])&&count($iHost['supportTeam'])) {
+			foreach ($iHost['supportTeam'] as $mate) $team[]=$mate['Ename'];
+		}
+		if (!is_array($teammates)) $teammates=[$teammates];
+		if (array_search(static::macroAny,$teammates)!==false) {
+			//если в качестве условия указано * - значит нужен просто любая песочница
+			return count($team);
+		} elseif (array_search(static::macroNone,$teammates)!==false) {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+			return count($team)===0;
+		}
+		return count(array_intersect($teammates,$team));
+	}
+
+	/**
+	 * Проверка соответствия логина члена команды сопровождения из инвентори набору $teammates
+	 * @param $teammates
+	 * @param $iHost
+	 * @return boolean
+	 */
+	public static function conditionTeamLogins($teammates,$iHost) {
+		$team=[];
+		if (is_object($iHost['responsible'])) $team[]=$iHost['responsible']['login'];
+		if (is_array($iHost['supportTeam'])&&count($iHost['supportTeam'])) {
+			foreach ($iHost['supportTeam'] as $mate) $team[]=$mate['login'];
+		}
+		if (!is_array($teammates)) $teammates=[$teammates];
+		if (array_search(static::macroAny,$teammates)!==false) {
+			//если в качестве условия указано * - значит нужен просто любая песочница
+			return count($team);
+		} elseif (array_search(static::macroNone,$teammates)!==false) {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любой песочницы
+			return count($team)===0;
+		}
+		return count(array_intersect($teammates,$team));
 	}
 
 	// ОБХОД наборов правил
