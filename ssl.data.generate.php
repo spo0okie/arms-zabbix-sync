@@ -62,4 +62,4 @@ foreach ($items as $item) {
 
 // --- output ------------------------------------------------------------------
 
-echo json_encode(['data' => $result], JSON_UNESCAPED_UNICODE);
+echo json_encode(['data' => $result], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
