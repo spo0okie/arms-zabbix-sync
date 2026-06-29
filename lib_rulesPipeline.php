@@ -11,6 +11,8 @@ class rulesPipeline {
 
 	public $zabbixApi=null;
 	public $inventoryApi=null;
+	//статическая ссылка на inventory API для условий-методов (они статические)
+	public static $inventory=null;
 	public $ruleSets=null;
 	public $zabbixTemplates;
 	public $zabbixGroups;
@@ -38,6 +40,7 @@ class rulesPipeline {
 	public function init($zabbix,$inventory,$rules){
 		$this->zabbixApi=$zabbix;
 		$this->inventoryApi=$inventory;
+		static::$inventory=$inventory;
 		$this->ruleSets=$rules;
 
 		$this->zabbixTemplates=[];
@@ -112,6 +115,59 @@ class rulesPipeline {
 			return !(boolean)(count($hostServices));
 		} else {
 			$svcNames=arrHelper::getItemsField($hostServices,'name');
+			return (boolean)(count(array_intersect($services,$svcNames)));
+		}
+	}
+
+	/**
+	 * Собрать имя сервиса и имена всех его родителей (вверх по цепочке parent_id).
+	 * Все сервисы предзагружены в кэш inventory (cacheServices), поэтому подъём по дереву
+	 * идёт по данным в памяти без обращений к API.
+	 * @param $service array стартовый сервис (как минимум с полями name/parent_id)
+	 * @return array список имён [name=>name,...]
+	 */
+	protected static function serviceAncestorNames($service) {
+		$names=[];
+		$guard=0;	//защита от зацикливания при битых данных
+		while (is_array($service)) {
+			if (isset($service['name'])) $names[$service['name']]=$service['name'];
+			$parentId=$service['parent_id']??null;
+			if (!$parentId || ++$guard>50) break;
+			//родительский сервис берём из предзагруженного кэша (getService вернёт его из памяти)
+			$service=is_object(static::$inventory)?static::$inventory->getService($parentId):null;
+		}
+		return $names;
+	}
+
+	/**
+	 * Проверка наличия на узле инвентори сервиса из набора $services с учётом вложенности:
+	 * совпадение засчитывается если узел входит в сервис, который (возможно, через цепочку
+	 * родительских сервисов) входит в один из указанных $services.
+	 * Например serviceRecursive=>['b'] совпадёт, если узел в сервисе 'd', который входит в 'c',
+	 * который входит в 'b'.
+	 * @param $services
+	 * @param $iHost
+	 * @return boolean
+	 */
+	public static function conditionServiceRecursive($services,$iHost) {
+		if (!is_array($services)) $services=[$services];
+		$hostServices=$iHost['services']??[];
+		//убираем архивированные сервисы
+		foreach ($hostServices as $i=>$service) {
+			if ($service['archived']??false) unset($hostServices[$i]);
+		}
+		if (array_search(static::macroAny,$services)!==false) {
+			//если в качестве условия указано * - значит нужен просто любой сервис
+			return (boolean)(count($hostServices));
+		} elseif (array_search(static::macroNone,$services)!==false) {
+			//если в качестве условия указано FALSE - значит нужно отсутствие любого сервиса
+			return !(boolean)(count($hostServices));
+		} else {
+			//собираем имена всех сервисов узла вместе с их родительскими сервисами
+			$svcNames=[];
+			foreach ($hostServices as $service) {
+				$svcNames=array_merge($svcNames,static::serviceAncestorNames($service));
+			}
 			return (boolean)(count(array_intersect($services,$svcNames)));
 		}
 	}

@@ -49,6 +49,7 @@ $inventory=new inventoryApi();
 $inventory->init($webInventory,$inventoryAuth);
 $inventory->cacheComps(360);
 $inventory->cacheTechs();
+$inventory->cacheServices();
 echo "complete\n";
 
 echo "Loading Zabbix hosts ... ";

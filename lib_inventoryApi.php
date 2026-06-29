@@ -54,6 +54,20 @@ class inventoryApi {
 	}
 
 	/**
+	 * Собрать данные обо всех сервисах разом (для построения дерева вложенности в памяти).
+	 * Кэширует под тем же ключом и с теми же expand, что и getService, поэтому
+	 * последующие getService() обслуживаются из памяти без обращения к API.
+	 */
+	public function cacheServices() {
+		$data=$this->req('/api/services/?showArchived=1&per-page=0&expand=infrastructureResponsibleName,infrastructureSupportNames,responsibleName,supportNames');
+		$obj=json_decode($data,true);
+		if (!is_array($obj)) return;
+		foreach ($obj as $service) {
+			if (isset($service['id'])) $this->setCache('services',$service['id'],$service);
+		}
+	}
+
+	/**
 	 * Собрать данные о компах
 	 * @param $period integer период в днях за который нужны данные
 	 * (ОС не обновлявшиеся дольше указанного периода не попадут в кэш)
