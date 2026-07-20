@@ -38,9 +38,10 @@ $errorsList=[];
 $dryRun=!(array_search('real',$argv)!==false);
 $verbose=(array_search('verbose',$argv)!==false);
 
-//debug=host1,host2 — подробный вывод конвейера только по указанным узлам (fqdn/num/hostname/id)
+//debug=host1,host2 (или --debug=...) — подробный вывод конвейера только по указанным узлам (fqdn/num/hostname/id)
 $debugHosts=[];
 foreach ($argv as $arg) {
+	$arg=ltrim($arg,'-'); //допускаем префикс --
 	if (strpos($arg,'debug=')===0) $debugHosts=explode(',',substr($arg,strlen('debug=')));
 }
 

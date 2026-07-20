@@ -653,7 +653,14 @@ class rulesPipeline {
 	 */
 	public function pipeHost($iHost) {
 		$debug=$this->isDebugHost($iHost);
-		if ($debug) echo "\n===== PIPELINE DEBUG: ".$this->hostLabel($iHost)." =====\n";
+		if ($debug) {
+			echo "\n===== PIPELINE DEBUG: ".$this->hostLabel($iHost)." =====\n";
+			echo "----- поля инвентаризации, влияющие на теги сопровождения -----\n";
+			echo "responsible: ".json_encode($iHost['responsible']??null,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
+			echo "supportTeam: ".json_encode($iHost['supportTeam']??null,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
+			echo "  \${inventory:serviceman}   -> '".static::macroInventoryServiceman($iHost)."'\n";
+			echo "  \${inventory:supportTeam}  -> '".static::macroInventorySupportTeam($iHost)."'\n";
+		}
 		$actions=[];
 		foreach ($this->ruleSets as $setIndex=>$ruleSet) {
 			//добавляем результаты от каждого набора правил из конвейера
