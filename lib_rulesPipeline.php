@@ -495,7 +495,9 @@ class rulesPipeline {
 	}
 
 	public static function macroInventoryIp($iHost) {
-		return arrHelper::getMultiStringValue($iHost['ip'])[0]??'';
+		$ip = arrHelper::getMultiStringValue($iHost['ip'])[0]??'';
+		//inventory may send the address with a CIDR mask (e.g. 192.168.1.1/24); Zabbix does not accept it
+		return explode('/', $ip)[0];
 	}
 
 	public static function macroInventoryServiceman($iHost) {
