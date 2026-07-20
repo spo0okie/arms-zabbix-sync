@@ -38,6 +38,12 @@ $errorsList=[];
 $dryRun=!(array_search('real',$argv)!==false);
 $verbose=(array_search('verbose',$argv)!==false);
 
+//debug=host1,host2 — подробный вывод конвейера только по указанным узлам (fqdn/num/hostname/id)
+$debugHosts=[];
+foreach ($argv as $arg) {
+	if (strpos($arg,'debug=')===0) $debugHosts=explode(',',substr($arg,strlen('debug=')));
+}
+
 function verboseMsg($msg) {
 	global $verbose;
 	if (!$verbose) return;
@@ -64,6 +70,7 @@ echo "complete\n";
 echo "Loading Pipeline ... ";
 	$pipeLine=new rulesPipeline();
 	$pipeLine->init($zabbix,$inventory,require __DIR__.'/rules.priv.php');
+	if (count($debugHosts)) $pipeLine->setDebugHosts($debugHosts);
 echo "complete\n";
 
 $processedItems = [];

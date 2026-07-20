@@ -16,6 +16,8 @@ class rulesPipeline {
 	public $ruleSets=null;
 	public $zabbixTemplates;
 	public $zabbixGroups;
+	//список узлов (fqdn/num/hostname/id), по которым нужен подробный вывод конвейера
+	public $debugHosts=[];
 
 	const macroAny='*';
 	const macroNone=false;
@@ -650,10 +652,15 @@ class rulesPipeline {
 	 * @param $iHost
 	 */
 	public function pipeHost($iHost) {
+		$debug=$this->isDebugHost($iHost);
+		if ($debug) echo "\n===== PIPELINE DEBUG: ".$this->hostLabel($iHost)." =====\n";
 		$actions=[];
-		foreach ($this->ruleSets as $ruleSet) {
+		foreach ($this->ruleSets as $setIndex=>$ruleSet) {
 			//добавляем результаты от каждого набора правил из конвейера
-			$actions=array_merge_recursive($actions,static::checkRuleSet($ruleSet,$iHost));
+			$setActions=$debug
+				? static::debugRuleSet($ruleSet,$iHost,$setIndex)
+				: static::checkRuleSet($ruleSet,$iHost);
+			$actions=array_merge_recursive($actions,$setActions);
 		}
 		$this->prepareActions($actions);
 		$this->replaceInventoryMacros($actions,$iHost);
@@ -661,7 +668,83 @@ class rulesPipeline {
 		$this->prepareGroups($actions);
 		$this->prepareTags($actions);
 		//print_r($actions);
+		if ($debug) {
+			echo "----- итоговые actions после подстановки макросов -----\n";
+			echo json_encode($actions,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT)."\n";
+			echo "===== END DEBUG: ".$this->hostLabel($iHost)." =====\n\n";
+		}
 		return $actions;
+	}
+
+	/**
+	 * Задать список целевых узлов для отладки (fqdn/num/hostname/id)
+	 * @param array $hosts
+	 */
+	public function setDebugHosts($hosts) {
+		$this->debugHosts=array_values(array_filter(array_map('trim',$hosts),'strlen'));
+	}
+
+	/**
+	 * Метка узла для вывода (как в sync.php: comps->fqdn, techs->num)
+	 */
+	public function hostLabel($iHost) {
+		return (($iHost['class']??'')==='comps') ? ($iHost['fqdn']??'?') : ($iHost['num']??'?');
+	}
+
+	/**
+	 * Входит ли узел в список отлаживаемых. Сверяем по fqdn/num/hostname/id без учета регистра.
+	 */
+	public function isDebugHost($iHost) {
+		if (!count($this->debugHosts)) return false;
+		$candidates=array_map('mb_strtolower',array_filter([
+			$iHost['fqdn']??'',
+			$iHost['num']??'',
+			$iHost['hostname']??'',
+			(string)($iHost['id']??''),
+		],'strlen'));
+		foreach ($this->debugHosts as $target) {
+			if (in_array(mb_strtolower($target),$candidates,true)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Отладочный прогон одного набора правил: печатает по каждому правилу,
+	 * совпало оно или нет (и на каком условии отвалилось), возвращает действия
+	 * первого сработавшего правила — как checkRuleSet.
+	 */
+	public static function debugRuleSet($ruleSet,$iHost,$setIndex) {
+		foreach ($ruleSet as $ruleIndex=>$rule) {
+			$conditions=$rule[0]??[];
+			$condStr=static::debugConditionsStr($conditions);
+			$failedOn=null;
+			foreach ($conditions as $type=>$params) {
+				if (!static::checkSingleCondition($type,$params,$iHost)) { $failedOn=$type; break; }
+			}
+			if ($failedOn===null) {
+				echo "  set#$setIndex rule#$ruleIndex MATCH [$condStr]\n";
+				echo "      actions: ".json_encode($rule[1]??[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
+				return arrHelper::getArrayArrayItems($rule[1]);
+			}
+			echo "  set#$setIndex rule#$ruleIndex skip  [$condStr] (не прошло условие '$failedOn')\n";
+		}
+		echo "  set#$setIndex — ни одно правило не совпало\n";
+		return [];
+	}
+
+	/**
+	 * Компактно отрисовать условия правила для отладочного вывода
+	 */
+	public static function debugConditionsStr($conditions) {
+		if (!count($conditions)) return '<пусто/по-умолчанию>';
+		$parts=[];
+		foreach ($conditions as $type=>$params) {
+			$val=is_array($params)
+				? implode('|',array_map(fn($v)=>is_scalar($v)?$v:json_encode($v,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),$params))
+				: $params;
+			$parts[]="$type=$val";
+		}
+		return implode(', ',$parts);
 	}
 
 	public static function fetchTemplatesNames($ruleSets) {
