@@ -251,18 +251,19 @@ class zabbixApi {
 	 * Формирует список templates для обновления хоста, если в него нужно добавить template из набора toBe или
 	 * убрать template из набора notToBe
 	 * если ничего добавлять/убирать не нужно, то вернет $default
+	 * Отвязываемые шаблоны дополнительно складываются в $clear - их отвязываем с очисткой
+	 * унаследованных сущностей (unlink and clear в UI)
 	 * @param array $current
 	 * @param array $toBe
 	 * @param array $notToBe
+	 * @param array $clear отвязываемые с очисткой шаблоны (out)
 	 * @param null $default
 	 * @return array|null
 	 */
-	public static function generateTemplatesDiff(array $current, array $toBe, array $notToBe, $default=null) {
-		$remove=false; //флаг изменения набора
-		//нужно ли убирать?
-		foreach ($notToBe as $id) {
-			if (array_search($id,$current)!==false) $remove=true;
-		}
+	public static function generateTemplatesDiff(array $current, array $toBe, array $notToBe, &$clear=null, $default=null) {
+		//убираем только реально привязанные сейчас шаблоны
+		$clear=array_values(array_intersect($current,$notToBe));
+		$remove=count($clear)>0;
 		if ($remove) $current=array_diff($current,$notToBe);
 
 		$add=false;
@@ -777,12 +778,16 @@ class zabbixApi {
 
 		/* Templates - multiple value */
 		if (isset($actions['templateids']) || isset($actions['remove-templateids'])) {
+			$clearTpl=[];
 			$diffTpl=static::generateTemplatesDiff(
 				static::getTemplateIds($zHost),
 				$actions['templateids']??[],
-				$actions['remove-templateids']??[]
+				$actions['remove-templateids']??[],
+				$clearTpl
 			);
 			if ($diffTpl) $diff->templates=$diffTpl;
+			//отвязываем с очисткой унаследованных сущностей (unlink and clear)
+			if (count($clearTpl)) $diff->templates_clear=static::formTemplatesList($clearTpl);
 		}
 
 		/* TAGS - multiple value */

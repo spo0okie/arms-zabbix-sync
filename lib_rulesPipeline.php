@@ -862,6 +862,12 @@ class rulesPipeline {
 								zabbixApi::getTemplateIds($diff,'templates')
 							) . '; ';
 						break;
+					case 'templates_clear':
+						$output.='CLEAR: ' . implode(',',array_map(
+								function($id){return $this->zabbixTemplates[$id] ?? "#$id";},
+								zabbixApi::getTemplateIds($diff,'templates_clear')
+							)) . '; ';
+						break;
 					case 'groups':
 						$output.=strtoupper($property) . ': ' . $this->printDiffGroups(
 								zabbixApi::getGroupIds($zHost),
