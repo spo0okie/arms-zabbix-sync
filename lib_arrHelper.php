@@ -276,7 +276,7 @@ class arrHelper {
 	    $items=explode("\n",$value);
 	    if (count($items)==1) $items=explode("\r",$value);
 	    foreach ($items as $string) {
-	        if ($keepEmptyStrings || trim($value)) $result[]=$string;
+	        if ($keepEmptyStrings || trim($string)) $result[]=$string;
         }
 	    return $result;
     }
