@@ -98,9 +98,11 @@ class inventoryApi {
 		foreach ($obj as $tech) {
 			$tech['class']='techs';
 			//если своего адреса нет, но есть привязанная основная ОС с адресом, то используем его
-			if (!strlen($tech['ip']??'') && is_array($tech['comp']??null) && strlen($tech['comp']['ip']??'')) {
+			// 2026-07-30 отключено, потому что выгода от такого fallback не понятна,
+			// но при этом поведение становится неочевидным, т.к. в WEB-UI такого fallback нет.
+			/*if (!strlen($tech['ip']??'') && is_array($tech['comp']??null) && strlen($tech['comp']['ip']??'')) {
 				$tech['ip']=$tech['comp']['ip'];
-			}
+			}*/
 			$this->setCache('techs',$tech['id'],$tech);
 		}
 	}
