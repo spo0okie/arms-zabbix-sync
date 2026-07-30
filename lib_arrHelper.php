@@ -1,4 +1,3 @@
-#!/usr/bin/php
 <?php
 
 /*
@@ -284,11 +283,20 @@ class arrHelper {
 	/**
      * Ищет строку в наборе $search,
      * если в $search встречается элемент вида /.../ то он проверяется через preg_match
-	 * @param $value
-	 * @param $search
+	 * @param string|array $value что мы ищем (может быть несколько вариантов)
+	 * @param string|array $search среди каких значений мы ищем (может быть несколько вариантов)
 	 */
     public static function strMatch($value,$search) {
-	    foreach ($search as $item) {
+		if (!is_array($search)) $search=[$search];
+
+		if (is_array($value)) { //если у нас допустимое значение - множественное
+   			foreach ($value as $item) {	//перебираем все варианты
+      			if (static::strMatch($item,$search)) return true; //если один подошел - true
+      		}
+       		return false; //ни один не подошел - false
+     	}
+
+      	foreach ($search as $item) {
 	        $len=strlen($item);
 	        if ($len>2 && substr($item,0,1)==='/' && substr($item,$len-1,1)==='/') {
 	            if (preg_match($item,$value)) return true;
