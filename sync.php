@@ -51,6 +51,37 @@ function verboseMsg($msg) {
 	echo $msg;
 }
 
+//ключ external_links в инвентори, под которым храним hostid zabbix
+//(по аналогии с VMWare.UUID); его читает провайдер интеграции ARMS
+const INVENTORY_ZABBIX_HOSTID_KEY='Zabbix.hostid';
+
+/**
+ * Обратная запись: гарантирует, что в external_links узла инвентори
+ * записан hostid соответствующего узла zabbix. Пишет только при
+ * расхождении (нет ключа или значение изменилось) — чтобы не плодить
+ * историю изменений и лишние запросы. В сухом прогоне ничего не пишет.
+ *
+ * @param inventoryApi $inventory
+ * @param array $item узел инвентори (class + id + external_links)
+ * @param string|int|null $hostid резолвнутый hostid zabbix
+ * @param bool $dryRun
+ */
+function writebackHostid($inventory,$item,$hostid,$dryRun) {
+	if (!$hostid) return;
+
+	$stored=inventoryApi::externalLinks($item)[INVENTORY_ZABBIX_HOSTID_KEY]??null;
+	if ((string)$stored===(string)$hostid) return; //уже актуально
+
+	$hostName=$item['class']=='comps'?$item['fqdn']:$item['num'];
+	echo "  writeback hostid $hostid -> inventory {$item['class']}/{$item['id']} ($hostName)";
+	if ($dryRun) {
+		echo " - [dry run] skip\n";
+		return;
+	}
+	$ok=$inventory->setExternalLink($item['class'],$item['id'],INVENTORY_ZABBIX_HOSTID_KEY,(string)$hostid);
+	echo $ok?" - OK\n":" - ERROR\n";
+}
+
 echo "Initializin Inventory API ... ";
 $inventory=new inventoryApi();
 $inventory->init($webInventory,$inventoryAuth);
@@ -170,8 +201,11 @@ foreach ($processedItems as $entry) {
 			if ($dryRun)
 				echo "- [dry run] skip";
 			else
-				$zabbix->setHost($diff);
+				$hostid=$zabbix->setHost($diff); //новый hostid для обратной записи
 			echo "\n";
+
+			//записываем hostid созданного узла обратно в инвентори
+			writebackHostid($inventory,$item,$hostid,$dryRun);
 
 		} else {
 			if (in_array($hostid,$zabbixProcessed)) {
@@ -179,6 +213,12 @@ foreach ($processedItems as $entry) {
 				continue;
 			}
 			$zabbixProcessed[]=$hostid;
+
+			//узел найден в zabbix — независимо от того, есть ли изменения,
+			//убеждаемся что hostid записан в инвентори (первичное связывание
+			//найденных по FQDN/IP узлов, у которых ещё нет ключа)
+			writebackHostid($inventory,$item,$hostid,$dryRun);
+
 			$zHost = $zabbix->getHost($hostid);
 			$diff = $zabbix->applyPipelineActions($zHost, $params);
 

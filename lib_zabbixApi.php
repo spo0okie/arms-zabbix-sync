@@ -896,9 +896,13 @@ class zabbixApi {
 			foreach ($updateMacro as $i=>$v)arrHelper::delField($updateMacro[$i],'hostid');
 			if (count($updateMacro))  $this->setMacro($updateMacro);
 			//if (count($updateMacro))  $this->setMacro($updateMacro);
+
+			//отдаём hostid вызвавшему (нужен для обратной записи в инвентори)
+			return $hostid;
 		} else
 			echo " - host $method ERROR";
 
+		return null;
 	}
 
     public function searchUserByLogin($login) {

@@ -31,6 +31,49 @@ class inventoryApi {
 		return file_get_contents($this->apiUrl.$path,false,$this->context);
 	}
 
+	/**
+	 * PUT в инвентори (для обратной записи данных в узел).
+	 * @param string $path путь относительно apiUrl (например /api/comps/123)
+	 * @param array $body тело запроса (будет закодировано в JSON)
+	 * @return array|null декодированный ответ либо null при ошибке транспорта
+	 */
+	public function put($path,$body) {
+		$context=stream_context_create([
+			"http" => [
+				"method" => "PUT",
+				"header" => "Authorization: Basic {$this->auth}\r\nContent-Type: application/json\r\n",
+				"content" => json_encode($body,JSON_UNESCAPED_UNICODE),
+				"ignore_errors" => true, //чтобы читать тело и при 4xx/5xx
+			],
+			"ssl" => [
+				"verify_peer" => false,
+				"verify_peer_name" => false,
+			],
+		]);
+		$response=@file_get_contents($this->apiUrl.$path,false,$context);
+		if ($response===false) return null;
+		return json_decode($response,true);
+	}
+
+	/**
+	 * Записать/обновить внешнюю ссылку узла инвентори (external_links).
+	 * Инвентори при сохранении МЕРЖИТ переданный external_links поверх
+	 * существующего (ExternalDataModelTrait::externalDataBeforeSave), так
+	 * что прочие ключи (VMWare.* и т.п.) не затираются.
+	 *
+	 * @param string $class класс узла: comps|techs
+	 * @param int|string $id id узла в инвентори
+	 * @param string $key ключ внешней ссылки (например Zabbix.hostid)
+	 * @param string $value значение
+	 * @return bool успех (в ответе присутствует сохранённый id)
+	 */
+	public function setExternalLink($class,$id,$key,$value) {
+		$response=$this->put("/api/$class/$id",[
+			'external_links' => json_encode([$key=>$value],JSON_UNESCAPED_UNICODE),
+		]);
+		return is_array($response) && isset($response['id']);
+	}
+
 	public function getCache($model,$id,$default=null) {
 		return $this->cache[$model][$id]??$default;
 	}
