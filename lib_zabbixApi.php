@@ -811,10 +811,14 @@ class zabbixApi {
 		}
 
 		/* INTERFACES - multiple values */
-		if (isset($actions['host']) || isset($actions['interfaces'])) {
+		//адрес подключения задаётся действием address. Если его нет - откатываемся
+		//на host: у comps техническое имя узла и есть адрес (FQDN), там это одно и то же.
+		//У оборудования это разные вещи: имя - инвентарный номер, адрес - IP
+		$address=$actions['address']??$actions['host']??[];
+		if (count($address) || isset($actions['interfaces'])) {
 			static::generateInterfacesDiff(
 				$zHost['interfaces']??[],
-				$actions['host'],
+				$address,
 				$actions['interfaces']??[],
 				$diff
 			);

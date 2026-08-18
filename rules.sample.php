@@ -137,7 +137,7 @@ return
 			['type'=>'comps'],['name'=>'${inventory:fqdn}', 'host'=>'${inventory:fqdn}',],
 		],
 		[//оборудование именуем по инвентарному номеру, адресуем по IP
-			['type'=>'techs'],['name'=>'${inventory:num}', 'host'=>'${inventory:ip}',],
+			['type'=>'techs'],['name'=>'${inventory:num}', 'host'=>'${inventory:num}', 'address'=>'${inventory:ip}',],
 		],
 	],
 

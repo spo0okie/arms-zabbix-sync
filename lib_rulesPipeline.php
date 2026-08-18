@@ -1101,14 +1101,55 @@ class rulesPipeline {
 
         if ($iHost['fqdn']) {
             $hostId=$this->zabbixApi->searchHostFqdn($iHost['fqdn']);
-            if ($hostId!==false) {
-                //echo "found ".$iHost['num']." by FQDN \n";
-                return $hostId;
+            //searchHostFqdn отдаёт null если не нашёл - тогда идём искать по IP
+            if ($hostId) {
+                return $this->techsHostIsTaken($hostId,$iHost)?false:$hostId;
             }
         }
 
-        return $this->zabbixApi->searchHostByIps(arrHelper::getMultiStringValue($iHost['ip']));
+        $hostId=$this->zabbixApi->searchHostByIps(arrHelper::getMultiStringValue($iHost['ip']));
+        if ($hostId===false) return false;
+
+        return $this->techsHostIsTaken($hostId,$iHost)?false:$hostId;
     }
+
+	/**
+	 * Занят ли найденный по адресу узел zabbix другой единицей оборудования.
+	 *
+	 * По FQDN/IP узел ищется вслепую, а адрес - вещь переезжающая: снятый
+	 * с эксплуатации коммутатор оставляет свой IP преемнику. Если найденный
+	 * узел привязан макросами к другой записи инвентори, и та запись ещё
+	 * существует - занимать его нельзя: за узлом стоит история наблюдений
+	 * того устройства, а преемник должен получить собственный узел.
+	 *
+	 * Тот же принцип, что и в findCompsZabbixHostid для клонов-песочниц.
+	 *
+	 * @param $hostId
+	 * @param $iHost
+	 * @return bool
+	 */
+	public function techsHostIsTaken($hostId,$iHost) {
+		if (!is_array($zHost=$this->zabbixApi->getHost($hostId))) return false;
+
+		$macros=$zHost['macros']??[];
+
+		//узел ни к чему не привязан - можно занимать
+		//(так подхватываются заведённые в zabbix вручную узлы)
+		if (!($inventoryClass=zabbixApi::getMacroValue($macros,'{$INVENTORY_CLASS}'))) return false;
+
+		//привязан к другому классу объектов инвентори - точно не наш
+		if ($inventoryClass!=='techs') return true;
+
+		//класс тот, но ссылки на конкретную единицу нет - считаем свободным
+		if (!($inventoryId=zabbixApi::getMacroValue($macros,'{$INVENTORY_ID}'))) return false;
+
+		//ссылается на нас же - забираем
+		if ((int)$iHost['id']===(int)$inventoryId) return false;
+
+		//ссылается на другую единицу: занят, только если та ещё есть в инвентори.
+		//иначе узел осиротел и его можно подобрать
+		return (bool)$this->inventoryApi->getTech($inventoryId);
+	}
 
 	/**
 	 * Ищет узел в заббикс соответствующий узлу в инвентори

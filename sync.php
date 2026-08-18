@@ -32,6 +32,7 @@ require_once dirname(__FILE__).'/lib_zabbixApi.php';
 require_once dirname(__FILE__).'/lib_inventoryApi.php';
 require_once dirname(__FILE__).'/lib_arrHelper.php';
 require_once dirname(__FILE__).'/lib_rulesPipeline.php';
+require_once dirname(__FILE__).'/lib_syncPlanner.php';
 
 $errorsList=[];
 
@@ -105,8 +106,7 @@ echo "Loading Pipeline ... ";
 	if (count($debugHosts)) $pipeLine->setDebugHosts($debugHosts);
 echo "complete\n";
 
-$processedItems = [];
-$techStacks = [];
+$pipedItems = [];
 
 // Проходим по всем элементам из inventory
 foreach (array_merge($inventory->getComps(), $inventory->getTechs()) as $item) {
@@ -131,47 +131,14 @@ foreach (array_merge($inventory->getComps(), $inventory->getTechs()) as $item) {
 		continue;
 	}
 
-	// Проверяем уникальность только для оборудования (class == 'techs')
-	if ($item['class'] == 'techs') {
-		$stackId = $item['model']['name'] . '|' . $item['ip'];
-
-		// Если ключ еще не существует, или его ['num'] больше текущего,
-		// то обновляем его текущим
-		if (!isset($techStacks[$stackId])) $techStacks[$stackId]=[];
-		$techStacks[$stackId][]=['item' => $item, 'params' => $params];
-
-	} else {
-		// Для других классов добавляем элемент без проверки уникальности
-		$processedItems[] = ['item' => $item, 'params' => $params];
-	}
+	$pipedItems[] = ['item' => $item, 'params' => $params];
 }
 
-// Добавляем уникальные элементы оборудования в итоговый массив
-foreach ($techStacks as $stack) {
-
-	//не настоящий стек
-	if (count($stack)===1) {
-		$processedItems[] = $stack[0];
-		continue;
-	}
-
-	//настоящий стек, сортируем по имени
-	usort($stack, fn($a, $b)=>strcmp($a['item']['num'], $b['item']['num']));
-	//мастер тот у кого имя меньше всех
-	$master=array_shift($stack);
-
-	echo "Stack found: [{$master['item']['num']}], ".implode(', ', array_map(fn($e) => $e['item']['num'], $stack))."\n";
-
-	$processedItems[] = $master;
-	foreach ($stack as $tech) {
-		$tech['params']=['actions' => ['update'], 'status' => [1]];   //можем только обновить статус на ВЫКЛ
-		$processedItems[]=$tech;
-	}
-
-}
+// Схлопываем стеки оборудования: мониторим только мастера, остальных гасим
+$processedItems = syncPlanner::buildProcessedItems($pipedItems, function($msg) {echo $msg;});
 
 // Этап 2: Сверка с Zabbix и выполнение действий
-$zabbixProcessed=[];	//для хранения обработанных в zabbix
+$planner=new syncPlanner();	//кто из узлов инвентори за какой узел zabbix отвечает
 foreach ($processedItems as $entry) {
 	$item = $entry['item'];
 	$params = $entry['params'];
@@ -208,11 +175,11 @@ foreach ($processedItems as $entry) {
 			writebackHostid($inventory,$item,$hostid,$dryRun);
 
 		} else {
-			if (in_array($hostid,$zabbixProcessed)) {
+			//узел уже занят другой записью инвентори - обслуживаем только первую
+			if (!$planner->claimHost($hostid)) {
 				echo "$hostName - [already processed] inventory -> zabbix search collision skip\n";
 				continue;
 			}
-			$zabbixProcessed[]=$hostid;
 
 			//узел найден в zabbix — независимо от того, есть ли изменения,
 			//убеждаемся что hostid записан в инвентори (первичное связывание

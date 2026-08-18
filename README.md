@@ -70,6 +70,51 @@ HTTP-вариант (тот же скрипт за веб-сервером):
   * `actions` — итоговые действия с **именами** шаблонов/групп (ID Zabbix не резолвятся).
     Действие `PSK` (ключи шифрования) в отчет не включается.
 
+#### Публикация explain.php через Apache
+Наружу должен смотреть **только** `explain.php` — в каталоге скрипта лежат секреты
+(`config.priv.php` с учетными данными, `rules.priv.php` с PSK-ключами, дампы `*.txt`).
+Поэтому публикуем не каталог, а один файл через `Alias`, закрыв каталог целиком:
+
+```apache
+# /zabbix-sync/explain.php -> explain-режим синхронизации arms.zabbix
+Alias /zabbix-sync/explain.php "C:/wamp/scripts/arms.zabbix/explain.php"
+
+<Directory "C:/wamp/scripts/arms.zabbix">
+    # каталог закрыт целиком: кроме explain.php тут только секреты
+    Require all denied
+
+    <Files "explain.php">
+        # доступ только с сервера ARMS (панель ходит через backend,
+        # браузеры пользователей сюда не обращаются)
+        Require ip 192.168.1.10
+        # либо, если фильтровать по IP негде: Require all granted
+        # (тогда защита только токеном - см. $explainToken)
+    </Files>
+</Directory>
+```
+Путь и IP замените на свои. PHP-обработчик — штатный для вашего Apache
+(в WAMP модуль PHP уже подключен, отдельной настройки не нужно).
+
+После `Restart` Apache проверка:
+```bash
+curl "http://synchost/zabbix-sync/explain.php?class=comps&id=123&token=ТОКЕН"
+```
+  * без/с неверным токеном — `403 {"error":"invalid token"}`;
+  * с токеном и существующим id — JSON-отчет;
+  * любой другой файл каталога (например `/zabbix-sync/config.priv.php`) — `403/404`.
+
+Замечания:
+  * Токен задается в `config.priv.php` (`$explainToken`), генерация:
+    `php -r "echo bin2hex(random_bytes(24));"`. Тот же токен вписывается в конфиг
+    провайдера `zabbix-sync` на стороне ARMS.
+  * Токен передается в URL, поэтому желательно HTTPS (или закрытый сегмент сети);
+    вместо URL-параметра можно слать заголовок `Authorization: Bearer <токен>`
+    (если PHP подключен через FastCGI/FPM, Apache по умолчанию вырезает этот
+    заголовок — добавьте в `<Files "explain.php">` директиву `CGIPassAuth On`;
+    для PHP-модуля, как в WAMP, ничего делать не нужно).
+  * Скрипт только читает: один GET в инвентори, в Zabbix не ходит, ничего не пишет —
+    нагрузка на сервер минимальная, отдельный пул/vhost не требуется.
+
 ### Настройка правил синхронизации
 находится в файле _rules.priv.php_ (есть пример _rules.sample.php_)
 сам файл должен содержать команду return и возвращать вложенный массив данных следующей структуры:
@@ -295,12 +340,18 @@ return [
 ];
 ```
 
-  * name - задать имя узла
-  * host - задать адрес узла
+  * name - задать видимое имя узла
+  * host - задать техническое имя узла (уникально в пределах Zabbix)
+  * address - задать адрес подключения (идет в интерфейсы узла)
+
+Если address не задан, адрес берется из host - у компьютеров техническое имя и адрес совпадают (FQDN).
+У оборудования это разные вещи: имя - инвентарный номер, адрес - IP. Адрес, заданный прямо в шаблоне
+интерфейса (`interfaces`), приоритетнее обоих.
 ```php
 [//сервер Zabbix
-    ['type'=>'comps','fqdn'=>'zabbix.domain.local'],    //для самого себя
-    ['name'=>'Сервер Zabbix','host'=>'127.0.0.1']       //Особенное имя и локальный адрес
+    ['type'=>'comps','fqdn'=>'zabbix.domain.local'],        //для самого себя
+    ['name'=>'Сервер Zabbix','host'=>'zabbix.domain.local', //Особенное видимое имя
+     'address'=>'127.0.0.1']                                //и локальный адрес подключения
 ];
 ```
 
@@ -370,8 +421,8 @@ return [
     [//компьютеры именуем по FQDN и обращаемся также
         ['type'=>'comps'],['name'=>'${inventory:fqdn}', 'host'=>'${inventory:fqdn}',],
     ],
-    [//оборудование по инвентарному номеру, а обращаемся по IP
-        ['type'=>'techs'],['name'=>'${inventory:num}', 'host'=>'${inventory:ip}',],
+    [//оборудование именуем по инвентарному номеру, а обращаемся по IP
+        ['type'=>'techs'],['name'=>'${inventory:num}', 'host'=>'${inventory:num}', 'address'=>'${inventory:ip}',],
     ],
 ];
 ```
@@ -382,7 +433,7 @@ return [
 ```php
 [// именование и адресация узлов
     [//компьютеры именуем по FQDN и обращаемся также
-        ['type'=>'comps','sandbox'=>'*'],['name'=>'${inventory:hostname} (${inventory:sandboxSuffix})', 'host'=>'${inventory:ip}',],
+        ['type'=>'comps','sandbox'=>'*'],['name'=>'${inventory:hostname} (${inventory:sandboxSuffix})', 'address'=>'${inventory:ip}',],
     ],
 ];
 ```
