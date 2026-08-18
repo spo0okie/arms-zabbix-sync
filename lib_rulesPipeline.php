@@ -575,6 +575,56 @@ class rulesPipeline {
 	}
 
 
+	// МОДИФИКАТОРЫ МАКРОСОВ ========================================
+	// ${inventory:num|translit} - значение макроса прогоняется через модификаторы
+	// слева направо. Диспетчеризация по конвенции имён: |foo -> macroModFoo()
+
+	/**
+	 * Транслитерация кириллицы в латиницу (для технических имён zabbix,
+	 * которые не принимают кириллицу). Замена на '_' не годится -
+	 * МХК- и МСК- слились бы в одно имя
+	 * @param string $value
+	 * @return string
+	 */
+	public static function macroModTranslit($value) {
+		static $map=[
+			'А'=>'A','Б'=>'B','В'=>'V','Г'=>'G','Д'=>'D','Е'=>'E','Ё'=>'E','Ж'=>'ZH','З'=>'Z','И'=>'I',
+			'Й'=>'Y','К'=>'K','Л'=>'L','М'=>'M','Н'=>'N','О'=>'O','П'=>'P','Р'=>'R','С'=>'S','Т'=>'T',
+			'У'=>'U','Ф'=>'F','Х'=>'H','Ц'=>'TS','Ч'=>'CH','Ш'=>'SH','Щ'=>'SCH','Ъ'=>'','Ы'=>'Y','Ь'=>'',
+			'Э'=>'E','Ю'=>'YU','Я'=>'YA',
+			'а'=>'a','б'=>'b','в'=>'v','г'=>'g','д'=>'d','е'=>'e','ё'=>'e','ж'=>'zh','з'=>'z','и'=>'i',
+			'й'=>'y','к'=>'k','л'=>'l','м'=>'m','н'=>'n','о'=>'o','п'=>'p','р'=>'r','с'=>'s','т'=>'t',
+			'у'=>'u','ф'=>'f','х'=>'h','ц'=>'ts','ч'=>'ch','ш'=>'sh','щ'=>'sch','ъ'=>'','ы'=>'y','ь'=>'',
+			'э'=>'e','ю'=>'yu','я'=>'ya',
+		];
+		return strtr($value,$map);
+	}
+
+	/**
+	 * Приведение фрагмента к допустимому для технического имени zabbix виду:
+	 * всё вне [латиница цифры пробел . _ -] заменяется на '_', повторы '_'
+	 * схлопываются, '_' и пробелы по краям обрезаются. Суффиксы песочниц
+	 * разных форматов ('(SAP_2022)', '_CLONE', ' (CLONE2)') дают чистый
+	 * токен - разделитель к нему приписывается в правиле явно
+	 * @param string $value
+	 * @return string
+	 */
+	public static function macroModNormalize($value) {
+		$value=preg_replace('/[^a-zA-Z0-9 ._-]/','_',$value);
+		$value=preg_replace('/_{2,}/','_',$value);
+		return trim($value,'_ ');
+	}
+
+	/**
+	 * Пригодно ли значение как техническое имя узла zabbix
+	 * (латиница, цифры, пробел, точка, дефис, подчёркивание)
+	 * @param string $name
+	 * @return bool
+	 */
+	public static function isValidTechName($name) {
+		return (bool)preg_match('/^[a-zA-Z0-9 ._-]+$/',$name);
+	}
+
 	/**
 	 * Заменить макросы инвентаризации на реальные значения
 	 * @param $value
@@ -587,6 +637,24 @@ class rulesPipeline {
 				$this->replaceInventoryMacros($value[$key],$iHost);
 			}
 			return;
+		}
+		//макросы с модификаторами: ${inventory:num|translit|normalize}
+		//(литеральный проход ниже их не увидит - у него ключи с закрывающей скобкой)
+		if (preg_match_all('/\$\{([a-zA-Z]+:[a-zA-Z]+)((?:\|[a-zA-Z]+)+)\}/',$value,$matches,PREG_SET_ORDER)) {
+			foreach ($matches as $m) {
+				$base='${'.$m[1].'}';
+				if (!isset(static::$inventoryMacros[$base])) continue;	//не наш макрос - не трогаем
+				$resolver=static::$inventoryMacros[$base];
+				$replacement=static::$resolver($iHost);
+				foreach (array_filter(explode('|',$m[2])) as $mod) {
+					$modMethod='macroMod'.ucfirst(strtolower($mod));
+					if (!method_exists(__CLASS__,$modMethod)) {
+						die("HALT: no macro modifier [$mod] found in rulesPipeline class ($m[0])");
+					}
+					$replacement=static::$modMethod($replacement);
+				}
+				$value=str_replace($m[0],$replacement,$value);
+			}
 		}
 		foreach (static::$inventoryMacros as $macro => $resolver) {
 			if (strpos($value,$macro)!==false) {
@@ -721,6 +789,15 @@ class rulesPipeline {
 		}
 		$this->prepareActions($actions);
 		$this->replaceInventoryMacros($actions,$iHost);
+		//техническое имя zabbix принимает только из ограниченного набора символов -
+		//ловим это ещё на конвейере (внятной ошибкой по узлу), а не ошибкой API
+		foreach (arrHelper::getArrayArrayItem($actions,'host') as $host) {
+			if (!static::isValidTechName($host)) {
+				$actions['errors'][]="host [$host] содержит недопустимые для zabbix символы"
+					." (можно: латиница цифры пробел . _ -);"
+					." используйте модификаторы макросов |translit и |normalize";
+			}
+		}
 		$this->prepareTemplates($actions);
 		$this->prepareGroups($actions);
 		$this->prepareTags($actions);
