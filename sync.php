@@ -53,7 +53,7 @@ function verboseMsg($msg) {
 
 //ключ external_links в инвентори, под которым храним hostid zabbix
 //(по аналогии с VMWare.UUID); его читает провайдер интеграции ARMS
-const INVENTORY_ZABBIX_HOSTID_KEY='Zabbix.hostid';
+const INVENTORY_ZABBIX_HOSTID_KEY=inventoryApi::ZABBIX_HOSTID_KEY;
 
 /**
  * Обратная запись: гарантирует, что в external_links узла инвентори

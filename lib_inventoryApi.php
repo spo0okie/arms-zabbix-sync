@@ -12,6 +12,15 @@ class inventoryApi {
 	public $auth=null;
 	public $context=null;
 
+	//ключ external_links в инвентори, под которым хранится hostid zabbix
+	//(пишется синхронизацией, читается провайдером интеграции ARMS и explain-режимом)
+	const ZABBIX_HOSTID_KEY='Zabbix.hostid';
+
+	//expand-наборы едины для bulk-кэша и точечных запросов,
+	//чтобы форма данных узла не зависела от способа загрузки
+	const COMPS_EXPAND='responsible,fqdn,domain,site,supportTeam,sandbox,services,arm.stateName';
+	const TECHS_EXPAND='responsible,comp,site,supportTeam,stateName,type,model,manufacturer,services,fqdn,itStaff';
+
 
 	public function init($url,$auth) {
 		$this->apiUrl=$url;
@@ -122,7 +131,7 @@ class inventoryApi {
 			$period_limit='&CompsSearch[updated_at]=>'.$today->format('Y-m-d');
 		} else $period_limit='';
 
-		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand=responsible,fqdn,domain,site,supportTeam,sandbox,services,arm.stateName'.$period_limit);
+		$data=$this->req('/api/comps/filter?showArchived=1&per-page=0&expand='.static::COMPS_EXPAND.$period_limit);
 		$obj=json_decode($data,true);
 		//var_dump($data);
 		foreach ($obj as $comp) {
@@ -136,7 +145,7 @@ class inventoryApi {
 	 */
 	public function cacheTechs() {
 
-		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand=responsible,comp,site,supportTeam,stateName,type,model,manufacturer,services,fqdn,itStaff');
+		$data=$this->req('/api/techs/?showArchived=1&per-page=0&expand='.static::TECHS_EXPAND);
 		$obj=json_decode($data,true);
 		foreach ($obj as $tech) {
 			$tech['class']='techs';
@@ -149,6 +158,26 @@ class inventoryApi {
 			$this->setCache('techs',$tech['id'],$tech);
 		}
 	}
+
+	/**
+	 * Точечно получить один узел из инвентори без bulk-кэша (для explain-режима).
+	 * Использует те же expand, что и bulk-методы, поэтому форма данных совпадает.
+	 * @param string $class comps|techs
+	 * @param int|string $id
+	 * @return array|null узел (с проставленным 'class') либо null если не найден/ошибка
+	 */
+	public function fetchItem($class,$id) {
+		$expand=$class==='comps'?static::COMPS_EXPAND:static::TECHS_EXPAND;
+		$data=@$this->req('/api/'.$class.'/'.(int)$id.'?expand='.$expand);
+		$obj=is_string($data)?json_decode($data,true):null;
+		if (!is_array($obj)||!isset($obj['id'])) return null;
+		$obj['class']=$class;
+		$this->setCache($class,$obj['id'],$obj);
+		return $obj;
+	}
+
+	public function fetchComp($id) {return $this->fetchItem('comps',$id);}
+	public function fetchTech($id) {return $this->fetchItem('techs',$id);}
 
 	public function getComps() {return $this->cache['comps']??[];}
 	public function getComp($id) {return $this->cache['comps'][$id]??null;}

@@ -46,6 +46,10 @@ class rulesPipeline {
 		$this->ruleSets=$rules;
 
 		$this->zabbixTemplates=[];
+		$this->zabbixGroups=[];
+		//explain-режим (без Zabbix): имена шаблонов/групп не резолвятся в ID -
+		//объяснению нужны имена, а проверять их существование в Zabbix не его задача
+		if (is_null($zabbix)) return;
 		foreach (static::fetchTemplatesNames($rules) as $tpl) {
 			$objTpl=arrHelper::getItemByFields($zabbix->cache['templates'],['name'=>$tpl]);
 			if (!is_array($objTpl)) die("HALT: cant find template [$tpl]");
@@ -437,18 +441,64 @@ class rulesPipeline {
 	}
 
 	/**
+	 * Прогнать хост через один набор правил, собрав трейс по каждому проверенному правилу.
+	 * Семантика как раньше: срабатывает первое правило, все условия которого выполнились
+	 * (и действия которого не пусты) — дальше правила набора не проверяются.
+	 *
+	 * Внутри набора правилами считаются только записи с числовыми ключами;
+	 * строковые ключи ('desc' и т.п.) зарезервированы под метаданные набора.
+	 *
+	 * @param $ruleSet
+	 * @param $iHost
+	 * @return array [
+	 *   'actions' => array действия сработавшего правила (пусто если ничего не совпало),
+	 *   'matched' => int|null индекс сработавшего правила,
+	 *   'rules'   => array трейс: по каждому проверенному правилу
+	 *                [index, desc|null, conditions (сырой массив), matched (bool), failedOn (string|null)]
+	 * ]
+	 */
+	public static function traceRuleSet($ruleSet,$iHost) {
+		$trace=['actions'=>[],'matched'=>null,'rules'=>[]];
+		foreach ($ruleSet as $ruleIndex=>$rule) {
+			if (!is_int($ruleIndex)) continue;	//метаданные набора (desc), а не правило
+			if (!isset($rule[0])) {
+				die("HALT: no condition found in rule: ".print_r($rule,true));
+			}
+			if (!isset($rule[1])) {
+				die("HALT: no action found in rule: ".print_r($rule,true));
+			}
+			$failedOn=null;
+			foreach ($rule[0] as $type=>$params) {
+				if (!static::checkSingleCondition($type,$params,$iHost)) {$failedOn=$type; break;}
+			}
+			$trace['rules'][]=[
+				'index'=>$ruleIndex,
+				'desc'=>$rule['desc']??null,
+				'conditions'=>$rule[0],
+				'matched'=>$failedOn===null,
+				'failedOn'=>$failedOn,
+			];
+			if ($failedOn===null) {
+				$actions=arrHelper::getArrayArrayItems($rule[1]);
+				//как и раньше: совпавшее правило с пустыми действиями не останавливает перебор
+				if (count($actions)) {
+					$trace['matched']=$ruleIndex;
+					$trace['actions']=$actions;
+					return $trace;
+				}
+			}
+		}
+		return $trace;
+	}
+
+	/**
 	 * Прогнать хост через один набор правил
 	 * @param $ruleSet
 	 * @param $iHost
 	 * @return array
 	 */
 	public static function checkRuleSet($ruleSet,$iHost) {
-		foreach ($ruleSet as $rule) {
-			//возвращаем действия от первого правила которое отработало на узле
-			if (count($actions=self::checkRule($rule,$iHost))) return arrHelper::getArrayArrayItems($actions);
-		}
-		//возвращаем ничего если ничего не совпало
-		return [];
+		return static::traceRuleSet($ruleSet,$iHost)['actions'];
 	}
 
 	// МАКРОСЫ ========================================
@@ -640,10 +690,10 @@ class rulesPipeline {
 
 	public function prepareActions(&$actions) {
 		//убираем из того что запрошено сделать, то что запрошено не делать
-		$actions['actions']=array_diff(
+		$actions['actions']=array_values(array_unique(array_diff(
 			arrHelper::getArrayArrayItem($actions,'actions'),
 			arrHelper::getArrayArrayItem($actions,'remove-actions')
-		);
+		)));
 	}
 
 
@@ -716,27 +766,129 @@ class rulesPipeline {
 	}
 
 	/**
+	 * Метка набора для вывода: имя (строковый ключ верхнего уровня rules) либо номер.
+	 * Работает и на старом безымянном формате — тогда просто "set#N".
+	 */
+	public static function setLabel($setIndex,$ruleSet=[]) {
+		$label=is_int($setIndex) ? "set#$setIndex" : "set[$setIndex]";
+		if (is_array($ruleSet) && strlen($ruleSet['desc']??'')) $label.=" ({$ruleSet['desc']})";
+		return $label;
+	}
+
+	/**
+	 * Метка правила для вывода: номер + описание (если задано ключом 'desc')
+	 */
+	public static function ruleLabel($ruleTrace) {
+		$label="rule#{$ruleTrace['index']}";
+		if (strlen($ruleTrace['desc']??'')) $label.=" ({$ruleTrace['desc']})";
+		return $label;
+	}
+
+	/**
 	 * Отладочный прогон одного набора правил: печатает по каждому правилу,
 	 * совпало оно или нет (и на каком условии отвалилось), возвращает действия
 	 * первого сработавшего правила — как checkRuleSet.
 	 */
 	public static function debugRuleSet($ruleSet,$iHost,$setIndex) {
-		foreach ($ruleSet as $ruleIndex=>$rule) {
-			$conditions=$rule[0]??[];
-			$condStr=static::debugConditionsStr($conditions);
-			$failedOn=null;
-			foreach ($conditions as $type=>$params) {
-				if (!static::checkSingleCondition($type,$params,$iHost)) { $failedOn=$type; break; }
+		$trace=static::traceRuleSet($ruleSet,$iHost);
+		$setLabel=static::setLabel($setIndex,$ruleSet);
+		foreach ($trace['rules'] as $ruleTrace) {
+			$condStr=static::debugConditionsStr($ruleTrace['conditions']);
+			$ruleLabel=static::ruleLabel($ruleTrace);
+			if ($ruleTrace['matched'] && $ruleTrace['index']===$trace['matched']) {
+				echo "  $setLabel $ruleLabel MATCH [$condStr]\n";
+				echo "      actions: ".json_encode($trace['actions'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
+			} elseif ($ruleTrace['matched']) {
+				echo "  $setLabel $ruleLabel MATCH [$condStr] (действий нет, перебор продолжен)\n";
+			} else {
+				echo "  $setLabel $ruleLabel skip  [$condStr] (не прошло условие '{$ruleTrace['failedOn']}')\n";
 			}
-			if ($failedOn===null) {
-				echo "  set#$setIndex rule#$ruleIndex MATCH [$condStr]\n";
-				echo "      actions: ".json_encode($rule[1]??[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
-				return arrHelper::getArrayArrayItems($rule[1]);
-			}
-			echo "  set#$setIndex rule#$ruleIndex skip  [$condStr] (не прошло условие '$failedOn')\n";
 		}
-		echo "  set#$setIndex — ни одно правило не совпало\n";
-		return [];
+		if ($trace['matched']===null) echo "  $setLabel — ни одно правило не совпало\n";
+		return $trace['actions'];
+	}
+
+	/**
+	 * Прогнать узел через конвейер в режиме "объяснения" (без Zabbix):
+	 * вернуть структурный отчет — вердикт, трейс по каждому набору правил и
+	 * итоговые действия. Имена шаблонов/групп остаются именами (ID не резолвятся),
+	 * поэтому pipeline можно инициализировать без Zabbix: init(null,$inventory,$rules).
+	 *
+	 * @param $iHost array узел инвентори (та же форма, что у cacheComps/cacheTechs)
+	 * @return array [
+	 *   'host'    => [class,id,name],
+	 *   'verdict' => см. explainVerdict(),
+	 *   'errors'  => array причины отказа (пусто если нет),
+	 *   'status'  => int|null итоговый статус узла (0 — мониторится, 1 — приостановлен),
+	 *   'sets'    => трейс: [index, desc|null, matched (int|null), rules[...]] по каждому набору,
+	 *   'actions' => итоговые действия после макросов (имена шаблонов/групп, теги и т.д.)
+	 * ]
+	 */
+	public function explainHost($iHost) {
+		$actions=[];
+		$sets=[];
+		foreach ($this->ruleSets as $setIndex=>$ruleSet) {
+			$trace=static::traceRuleSet($ruleSet,$iHost);
+			//условия в JSON-отчете отдаем строкой — потребителю (карточке ARMS) нужен читаемый вид
+			$rules=[];
+			foreach ($trace['rules'] as $ruleTrace) {
+				$ruleTrace['conditions']=static::debugConditionsStr($ruleTrace['conditions']);
+				$rules[]=$ruleTrace;
+			}
+			$sets[]=[
+				'index'=>$setIndex,
+				'desc'=>$ruleSet['desc']??null,
+				'matched'=>$trace['matched'],
+				'rules'=>$rules,
+			];
+			$actions=array_merge_recursive($actions,$trace['actions']);
+		}
+		$this->prepareActions($actions);
+		$this->replaceInventoryMacros($actions,$iHost);
+		$this->prepareTags($actions);
+		//шаблоны/группы в ID не конвертируем — см. docblock
+
+		//секреты в отчет не попадают: PSK-ключи шифрования не для карточки узла
+		unset($actions['PSK']);
+
+		$errors=array_values((array)($actions['errors']??[]));
+		$status=$actions['status']??null;
+		if (is_array($status)) $status=reset($status);	//array_merge_recursive превращает скаляры в массивы
+
+		return [
+			'host'=>[
+				'class'=>$iHost['class']??null,
+				'id'=>$iHost['id']??null,
+				'name'=>$this->hostLabel($iHost),
+			],
+			'verdict'=>static::explainVerdict($actions,$iHost),
+			'errors'=>$errors,
+			'status'=>is_null($status)?null:(int)$status,
+			'sets'=>$sets,
+			'actions'=>$actions,
+		];
+	}
+
+	/**
+	 * Вердикт "попадает ли узел в мониторинг" по итоговым действиям конвейера.
+	 * Привязка к Zabbix определяется по external_links[Zabbix.hostid] (обратная
+	 * запись синхронизации), без обращения к Zabbix.
+	 *
+	 * @return string
+	 *   declined    — правила явно запретили мониторинг (errors)
+	 *   monitored   — узел уже привязан к Zabbix и будет обновляться
+	 *   add         — узел будет добавлен в мониторинг при следующей синхронизации
+	 *   update-only — узел не привязан, а создание не разрешено (только обновление) — не добавится
+	 *   skip        — конвейер не назначил действий
+	 */
+	public static function explainVerdict($actions,$iHost) {
+		if (count((array)($actions['errors']??[]))) return 'declined';
+		$acts=$actions['actions']??[];
+		$linked=strlen((string)(inventoryApi::externalLinks($iHost)[inventoryApi::ZABBIX_HOSTID_KEY]??''));
+		if ($linked && (in_array('create',$acts)||in_array('update',$acts))) return 'monitored';
+		if (in_array('create',$acts)) return 'add';
+		if (in_array('update',$acts)) return 'update-only';
+		return 'skip';
 	}
 
 	/**
