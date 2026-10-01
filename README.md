@@ -114,6 +114,30 @@ curl "http://synchost/zabbix-sync/explain.php?class=comps&id=123&token=ТОКЕ�
     для PHP-модуля, как в WAMP, ничего делать не нужно).
   * Скрипт только читает: один GET в инвентори, в Zabbix не ходит, ничего не пишет —
     нагрузка на сервер минимальная, отдельный пул/vhost не требуется.
+  * Панель ARMS ходит с адреса **сервера** ARMS (backend, не браузер пользователя):
+    в `Require ip` должен быть именно он. Если ARMS и синхронизация на одной машине —
+    это LAN-адрес самой машины (при обращении по FQDN) либо `127.0.0.1`/`::1`
+    (при `'url' => 'https://localhost/...'` в конфиге провайдера). С какого адреса
+    реально пришел запрос — видно в access-логе Apache.
+
+Если Apache управляется **Puppet** (puppetlabs-apache), руками положенный конфиг
+будет затерт при следующем прогоне (`purge_configs` по умолчанию включен) —
+конфиг нужно объявить ресурсом: либо `custom_fragment` у существующего
+`apache::vhost` инвентаризации, либо отдельным `apache::custom_config`
+с тем же содержимым (кладет управляемый файл в conf.d, действует на все vhost'ы):
+```puppet
+apache::custom_config { 'zabbix-sync':
+  content => @("CONFIG"/L),
+    Alias /zabbix-sync/explain.php "/opt/zabbixSync/explain.php"
+    <Directory "/opt/zabbixSync">
+        Require all denied
+        <Files "explain.php">
+            Require ip 127.0.0.1 ::1 <адрес сервера ARMS>
+        </Files>
+    </Directory>
+    | CONFIG
+}
+```
 
 ### Настройка правил синхронизации
 находится в файле _rules.priv.php_ (есть пример _rules.sample.php_)

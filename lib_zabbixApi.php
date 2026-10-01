@@ -28,7 +28,13 @@ class zabbixApi {
 		$this->setOptions($options);
 	}
 
-	function req($method,$params) {
+	/**
+	 * @param string $method
+	 * @param mixed $params
+	 * @param bool $allowEmpty пустой результат (ничего не найдено) — не ошибка, вернуть []
+	 * @return array|null
+	 */
+	function req($method,$params,$allowEmpty=false) {
 
 		$request=new stdClass();
 		$request->jsonrpc="2.0";
@@ -60,7 +66,7 @@ class zabbixApi {
 			is_array($arrData=json_decode($respData,true)) &&
 			isset($arrData['result']) &&
 			is_array($arrData['result']) &&
-			count($arrData['result'])
+			(count($arrData['result']) || $allowEmpty)
 		) return $arrData['result'];
 		echo "Zabbix API req ERR:\n";
 		echo ">".$reqData."\n";
