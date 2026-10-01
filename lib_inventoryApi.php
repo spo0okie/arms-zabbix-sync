@@ -176,6 +176,18 @@ class inventoryApi {
 		return $obj;
 	}
 
+	/**
+	 * Найти сотрудника по логину (при нескольких записях API отдает неуволенную)
+	 * @param string $login
+	 * @return array|null запись сотрудника (Ename, Login, ...) либо null если не найден/ошибка
+	 */
+	public function searchUser($login) {
+		$data=@$this->req('/api/users/search?login='.urlencode($login));
+		$obj=is_string($data)?json_decode($data,true):null;
+		if (!is_array($obj)||!isset($obj['id'])) return null;
+		return $obj;
+	}
+
 	public function fetchComp($id) {return $this->fetchItem('comps',$id);}
 	public function fetchTech($id) {return $this->fetchItem('techs',$id);}
 

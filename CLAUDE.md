@@ -24,7 +24,7 @@ Rule sets and rules may optionally carry names: set name = string top-level key 
 Auxiliary scripts (not part of the daily sync loop):
 - `template2service.php <templateName> <serviceID>` — copies service-support tags onto a Zabbix template and strips them from its triggers
 - `triggers2services.php <templateName> <triggerName> <serviceID>` — same idea for a single trigger
-- `add_user.php <login> [surname]` — idempotently grants a user restricted monitoring access: host group `<login> nodes`, user group `<login> group` (read on it + `Zabbix servers`, problem tag filter `serviceman=<surname>` on the latter), user with role `User` in that group. Doesn't edit `rules.priv.php` — only checks for the `teamLogins` → `<login> nodes` rule and prints the snippet if missing. Pure logic in `lib_userAccess.php`.
+- `add_user.php <login> [surname]` — idempotently grants a user restricted monitoring access: host group `<login> nodes`, user group `<login> group` (read on it + `Zabbix servers`, problem tag filter `serviceman=<surname>` on the latter), user with role `User` in that group. Surname defaults to the first word of the employee's `Ename` from Inventory (`/api/users/search?login=`), matching how the `serviceman` tag value is built. Doesn't edit `rules.priv.php` — only checks for the `teamLogins` → `<login> nodes` rule and prints the snippet if missing. Pure logic in `lib_userAccess.php`.
 - `user_alerts.php` — provisions/updates a fixed set of Zabbix actions (email + SMS escalation) for one hardcoded `$login`. Edit the file to change the user.
 
 ## Tests

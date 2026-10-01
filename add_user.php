@@ -11,16 +11,19 @@
  *  3. пользователь <login> с ролью User, включенный в "<login> group"
  *  4. проверка правила в rules.priv.php, наполняющего "<login> nodes" (если нет — печатает код для вставки)
  *
- * Фамилия нужна для фильтра по тегу serviceman. Если не указана — берется из уже
- * существующего пользователя zabbix.
+ * Фамилия нужна для фильтра по тегу serviceman. Если не указана — берется из ФИО
+ * сотрудника в инвентаризации (первое слово, как и в самом теге serviceman).
  * Скрипт идемпотентный: выполненные шаги пропускаются, повторный прогон ничего не меняет.
  *
  * @var $zabbixApiUrl string
  * @var $zabbixAuth string
+ * @var $webInventory string
+ * @var $inventoryAuth string
  */
 
 include dirname(__FILE__).'/config.priv.php';
 require_once dirname(__FILE__).'/lib_zabbixApi.php';
+require_once dirname(__FILE__).'/lib_inventoryApi.php';
 require_once dirname(__FILE__).'/lib_arrHelper.php';
 require_once dirname(__FILE__).'/lib_userAccess.php';
 
@@ -35,7 +38,19 @@ if ($argc<2) {
 
 $login=trim($argv[1]);
 $surname=trim($argv[2]??'');
+$name='';
 if (!strlen($login)) die("HALT: empty login\n");
+
+// ФАМИЛИЯ: аргумент, иначе ФИО из инвентаризации (до любых изменений в zabbix) ==
+if (!strlen($surname)) {
+	$inventory=new inventoryApi();
+	$inventory->init($webInventory,$inventoryAuth);
+	if (!$iUser=$inventory->searchUser($login))
+		die("HALT: user $login not found in inventory. Pass surname explicitly: add_user.php $login <surname>\n");
+	[$surname,$name]=userAccess::splitEname($iUser['Ename']??'');
+	if (!strlen($surname))
+		die("HALT: user $login has empty name in inventory. Pass surname explicitly: add_user.php $login <surname>\n");
+}
 
 $zabbix=new zabbixApi();
 //init() не зовем — он тянет в кэш все узлы/шаблоны, нам они не нужны
@@ -59,17 +74,6 @@ function zSet($method,$params) {
 function findHostGroup($name) {
 	return zGet('hostgroup.get',['output'=>['groupid','name'],'filter'=>['name'=>$name]])[0]??null;
 }
-
-// ПОЛЬЗОВАТЕЛЬ (ищем заранее: из него берем фамилию) ===========================
-$user=zGet('user.get',[
-	'output'=>['userid','username','name','surname','roleid'],
-	'selectUsrgrps'=>['usrgrpid','name'],
-	'filter'=>['username'=>$login],
-])[0]??null;
-
-if (!strlen($surname)) $surname=trim($user['surname']??'');
-if (!strlen($surname))
-	die("HALT: surname unknown — user $login is not in zabbix or has empty surname. Pass it: add_user.php $login <surname>\n");
 
 echo "User: $login ($surname)\n";
 
@@ -126,12 +130,19 @@ if (!$userGroup) {
 }
 
 // ПОЛЬЗОВАТЕЛЬ ================================================================
+$user=zGet('user.get',[
+	'output'=>['userid','username'],
+	'selectUsrgrps'=>['usrgrpid','name'],
+	'filter'=>['username'=>$login],
+])[0]??null;
+
 if (!$user) {
 	$role=zGet('role.get',['output'=>['roleid','name'],'filter'=>['name'=>USER_ROLE]])[0]??null;
 	if (!$role) die("HALT: role \"".USER_ROLE."\" not found\n");
 	$password=userAccess::generatePassword();
 	zSet('user.create',[
 		'username'=>$login,
+		'name'=>$name,
 		'surname'=>$surname,
 		'roleid'=>$role['roleid'],
 		'passwd'=>$password,

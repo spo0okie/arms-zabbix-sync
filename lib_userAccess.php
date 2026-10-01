@@ -14,6 +14,17 @@ class userAccess {
 	public static function userGroupName($login) {return "$login group";}
 
 	/**
+	 * Фамилия и имя из ФИО инвентаризации ("Фамилия Имя Отчество").
+	 * Фамилия — первое слово, как в теге serviceman (inventoryApi::fetchUserNames)
+	 * @param string $ename
+	 * @return array [фамилия, имя]
+	 */
+	public static function splitEname($ename) {
+		$words=preg_split('/\s+/u',trim((string)$ename),-1,PREG_SPLIT_NO_EMPTY);
+		return [$words[0]??'',$words[1]??''];
+	}
+
+	/**
 	 * Гарантирует как минимум чтение на указанные группы узлов.
 	 * Чужие права и права выше чтения не трогает.
 	 * @param array $current [['id'=>groupid,'permission'=>N],...] как отдает usergroup.get

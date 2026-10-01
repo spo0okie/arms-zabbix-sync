@@ -8,6 +8,12 @@ require_once __DIR__.'/../lib_userAccess.php';
  */
 class userAccessTest extends miniTestCase {
 
+	public function testSplitEname() {
+		$this->assertSame(['Концевич','Михаил'],userAccess::splitEname(' Концевич  Михаил Андреевич '));
+		$this->assertSame(['Котов',''],userAccess::splitEname('Котов'));
+		$this->assertSame(['',''],userAccess::splitEname(null));
+	}
+
 	public function testReadRightsAddedWhenMissing() {
 		$rights=userAccess::ensureReadRights([],[10,20],$changed);
 		$this->assertTrue($changed);
