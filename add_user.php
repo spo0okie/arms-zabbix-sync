@@ -28,7 +28,7 @@ require_once dirname(__FILE__).'/lib_arrHelper.php';
 require_once dirname(__FILE__).'/lib_userAccess.php';
 
 const ZABBIX_SERVERS_GROUP='Zabbix servers';
-const USER_ROLE='User';
+const USER_ROLE='User role';
 const SERVICEMAN_TAG='serviceman';
 
 if ($argc<2) {
