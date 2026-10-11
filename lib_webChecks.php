@@ -19,7 +19,7 @@ class webChecks {
     ];
     // Единые умолчания генератора и компактного экспорта.
     const SERVICE_DEFAULTS=[
-    	'problem'=>5,
+    	'problem'=>2,
     	'recovery'=>null,
      	'delay'=>'1m',
       	'status'=>0,
