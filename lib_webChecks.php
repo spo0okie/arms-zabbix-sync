@@ -4,12 +4,37 @@ require_once __DIR__.'/lib_zabbixApi.php';
 /** Генерация и синхронизация простых веб-проверок в существующем шаблоне Zabbix. */
 class webChecks {
     // Поля шага, поддерживаемые форматом данных и экспортом из Zabbix.
-    const STEP_FIELDS=['name','url','timeout','status_codes','required','follow_redirects','posts','headers','variables','query_fields','retrieve_mode'];
+    const STEP_FIELDS=[
+    	'name',
+    	'url',
+     	'timeout',
+      	'status_codes',
+       	'required',
+        'follow_redirects',
+        'posts',
+        'headers',
+        'variables',
+        'query_fields',
+        'retrieve_mode'
+    ];
     // Единые умолчания генератора и компактного экспорта.
-    const SERVICE_DEFAULTS=['problem'=>5, 'recovery'=>null, 'delay'=>'1m', 'status'=>0, 'priority'=>4];
+    const SERVICE_DEFAULTS=[
+    	'problem'=>5,
+    	'recovery'=>null,
+     	'delay'=>'1m',
+      	'status'=>0,
+       	'priority'=>4
+    ];
     const STEP_DEFAULTS=[
-        'timeout'=>'20s', 'status_codes'=>'200', 'required'=>'', 'follow_redirects'=>0,
-        'retrieve_mode'=>0, 'posts'=>[], 'headers'=>[], 'variables'=>[], 'query_fields'=>[],
+        'timeout'=>'10s',
+        'status_codes'=>'200',
+        'required'=>'',
+        'follow_redirects'=>0,
+        'retrieve_mode'=>0,
+        'posts'=>[],
+        'headers'=>[],
+        'variables'=>[],
+        'query_fields'=>[],
     ];
     /** Преобразует PHP-данные в сценарии и триггеры, проверяя их до обращения к API. */
     public static function prepare(array $data): array {
