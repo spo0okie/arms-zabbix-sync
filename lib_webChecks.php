@@ -1,7 +1,10 @@
 <?php
+require_once __DIR__.'/lib_zabbixApi.php';
 
 /** Генерация и синхронизация простых веб-проверок в существующем шаблоне Zabbix. */
 class webChecks {
+    // Поля шага, поддерживаемые форматом данных и экспортом из Zabbix.
+    const STEP_FIELDS=['name','url','timeout','status_codes','required','follow_redirects','posts','headers','variables','query_fields','retrieve_mode'];
     /** Преобразует PHP-данные в сценарии и триггеры, проверяя их до обращения к API. */
     public static function prepare(array $data): array {
         $template=$data['template']??null;
@@ -10,12 +13,19 @@ class webChecks {
         if (!isset($data['services']) || !is_array($data['services']))
             throw new InvalidArgumentException('Нужен массив services');
         $result=[];
+        $triggerNames=[];
         foreach ($data['services'] as $service) {
             if (!is_array($service)) throw new InvalidArgumentException('Описание сервиса должно быть массивом');
             $name=$service['name']??null;
             if (!is_string($name) || trim($name)==='' || preg_match('/[\r\n]/', $name))
                 throw new InvalidArgumentException('Нужно непустое имя сервиса без перевода строки');
             if (isset($result[$name])) throw new InvalidArgumentException("Повтор имени сервиса: $name");
+            // Явное имя влияет только на триггер; ключ web.test.fail всегда использует имя сценария.
+            $triggerName=array_key_exists('trigger_name', $service)?$service['trigger_name']:'Недоступен '.$name;
+            if (!is_string($triggerName) || trim($triggerName)==='' || preg_match('/[\r\n]/', $triggerName))
+                throw new InvalidArgumentException("$name: trigger_name должен быть непустой строкой без перевода строки");
+            if (isset($triggerNames[$triggerName])) throw new InvalidArgumentException("Повтор имени триггера: $triggerName");
+            $triggerNames[$triggerName]=true;
             $failures=self::positiveCount($service['problem']??5, 'problem');
             $recovery=$service['recovery']??null;
             if ($recovery!==null) $recovery=self::positiveCount($recovery, 'recovery');
@@ -32,7 +42,7 @@ class webChecks {
             foreach (array_values($steps) as $index=>$step) {
                 if (!is_array($step)) throw new InvalidArgumentException("$name: шаг должен быть массивом");
                 // Ограниченный набор полей; порядковые номера назначаются по порядку массива.
-                $unknown=array_diff(array_keys($step), ['name','url','timeout','status_codes','required','follow_redirects','posts','headers','variables','query_fields','retrieve_mode']);
+            $unknown=array_diff(array_keys($step), self::STEP_FIELDS);
                 if ($unknown) throw new InvalidArgumentException("$name: неизвестные поля шага: ".implode(', ', $unknown));
                 $step=array_merge([
                     'name'=>'Шаг '.($index+1), 'timeout'=>'10s', 'status_codes'=>'200',
@@ -49,28 +59,84 @@ class webChecks {
                 $step['status_codes']=(string)$step['status_codes'];
                 $preparedSteps[]=$step;
             }
-            $unknown=array_diff(array_keys($service), ['name','url','steps','problem','recovery','priority','status','delay']);
-            if ($unknown) throw new InvalidArgumentException("$name: неизвестные поля сервиса: ".implode(', ', $unknown));
-            // Ключ должен совпадать с автоматически созданным Zabbix: кавычки только при необходимости.
-            $parameter=$name;
-            if (preg_match('/[",\]]|^\[/', $name)) {
-                if (substr($name, -1)==='\\') throw new InvalidArgumentException("$name: имя в кавычках не может заканчиваться обратной косой чертой");
-                $parameter='"'.str_replace('"', '\\"', $name).'"';
+            if (array_key_exists('serviceids', $service)) {
+                if (!is_array($service['serviceids'])) throw new InvalidArgumentException("$name: serviceids должен быть массивом ID");
+                foreach ($service['serviceids'] as $id) {
+                    if ((!is_int($id) && !is_string($id)) || !ctype_digit((string)$id) || (int)$id<1)
+                        throw new InvalidArgumentException("$name: serviceids должен содержать положительные целые ID");
+                }
             }
-            $key='web.test.fail['.$parameter.']';
+            $unknown=array_diff(array_keys($service), ['name','url','steps','problem','recovery','priority','status','delay','serviceids','trigger_name','problem_expression','recovery_expression','trigger_status','trigger_tags']);
+            if ($unknown) throw new InvalidArgumentException("$name: неизвестные поля сервиса: ".implode(', ', $unknown));
+            $key=self::failureKey($name);
             $item='/'.$template.'/'.$key;
             $result[$name]=[
                 'scenario'=>['name'=>$name, 'delay'=>(string)($service['delay']??'1m'), 'status'=>$status, 'steps'=>$preparedSteps],
                 'trigger'=>[
-                    'description'=>'Недоступен '.$name,
+                    'description'=>$triggerName,
                     'expression'=>'count('.$item.',#'.$failures.',"ne",0)>'.($failures-1),
                     'recovery_mode'=>$recovery===null?0:1,
                     'recovery_expression'=>$recovery===null?'':'count('.$item.',#'.$recovery.',"eq",0)='.$recovery,
                     'priority'=>$priority, 'status'=>$status,
                 ],
             ];
+            // Экспорт сохраняет выражения буквально, без потери формата и ручных условий.
+            foreach (['problem_expression'=>'expression','recovery_expression'=>'recovery_expression'] as $input=>$field) {
+                if (!array_key_exists($input, $service)) continue;
+                if (!is_string($service[$input]) || ($input==='problem_expression' && trim($service[$input])===''))
+                    throw new InvalidArgumentException("$name: $input должен быть строкой" );
+                $result[$name]['trigger'][$field]=$service[$input];
+                if ($input==='recovery_expression') $result[$name]['trigger']['recovery_mode']=$service[$input]===''?0:1;
+            }
+            if (array_key_exists('trigger_status', $service)) {
+                if (!in_array($service['trigger_status'], [0,1], true)) throw new InvalidArgumentException("$name: trigger_status должен быть 0 или 1");
+                $result[$name]['trigger']['status']=$service['trigger_status'];
+            }
+            if (array_key_exists('trigger_tags', $service)) {
+                if (!is_array($service['trigger_tags'])) throw new InvalidArgumentException("$name: trigger_tags должен быть массивом");
+                foreach ($service['trigger_tags'] as $tag) {
+                    if (!is_array($tag) || !isset($tag['tag'], $tag['value']) || !is_string($tag['tag']) || !is_string($tag['value']))
+                        throw new InvalidArgumentException("$name: trigger_tags должен содержать строковые tag и value");
+                }
+                $result[$name]['trigger']['tags']=array_values($service['trigger_tags']);
+            }
+            // Отсутствие serviceids оставляет ручные теги, явный [] очищает теги сопровождения.
+            if (array_key_exists('serviceids', $service)) $result[$name]['serviceids']=$service['serviceids'];
         }
         return $result;
+    }
+
+    /** Формирует ключ автоматически создаваемого элемента данных с синтаксисом кавычек Zabbix. */
+    public static function failureKey(string $name): string {
+        $parameter=$name;
+        if (preg_match('/[",\]]|^\[/', $name)) {
+            if (substr($name, -1)==='\\') throw new InvalidArgumentException("$name: имя в кавычках не может заканчиваться обратной косой чертой");
+            $parameter='"'.str_replace('"', '\\"', $name).'"';
+        }
+        return 'web.test.fail['.$parameter.']';
+    }
+
+    /** Собирает отдельные значения тегов сопровождения из Inventory для каждого веб-сервиса. */
+    public static function enrichSupportTags(array $checks, $inventory): array {
+        $cache=[];
+        foreach ($checks as $name=>&$check) {
+            if (!array_key_exists('serviceids', $check)) continue;
+            $tags=['serviceman'=>[], 'supportteam'=>[]];
+            foreach ($check['serviceids'] as $id) {
+                if (!isset($cache[$id])) {
+                    $cache[$id]=$inventory->getServiceSupportTags($id);
+                    // Пустой ответ означает недоступный/несуществующий сервис, а не отсутствие ответственных.
+                    if (!isset($cache[$id]['serviceman'], $cache[$id]['supportteam']))
+                        throw new RuntimeException("$name: не удалось получить сопровождение сервиса Inventory #$id");
+                }
+                foreach ($tags as $tag=>$values) {
+                    $tags[$tag]=array_values(array_unique(array_merge($values, $cache[$id][$tag])));
+                }
+            }
+            $check['supportTags']=$tags;
+        }
+        unset($check);
+        return $checks;
     }
 
     /** Проверяет число последовательных результатов, используемых в count(). */
@@ -83,6 +149,11 @@ class webChecks {
     public static function diff(array $desired, array $current): array {
         $diff=[];
         foreach ($desired as $field=>$value) {
+            if ($field==='tags' && isset($current[$field])) {
+                // API может вернуть те же теги в другом порядке; это не изменение.
+                sort($value);
+                sort($current[$field]);
+            }
             if (!array_key_exists($field, $current) || !self::matches($value, $current[$field])) $diff[$field]=$value;
         }
         return $diff;
@@ -110,13 +181,22 @@ class webChecks {
         return $result;
     }
 
-    /** Строит полный план, затем применяет его: сначала сценарии, затем их триггеры. */
-    public static function sync($api, string $template, array $checks, bool $real=false): array {
+    /** Читает один шаблон со сценариями, шагами, триггерами и их ключами элементов данных. */
+    public static function readTemplate($api, string $template): array {
         $templates=self::request($api, 'template.get', ['output'=>['templateid','host'], 'filter'=>['host'=>$template]]);
         if (count($templates)!==1) throw new RuntimeException("Шаблон не найден однозначно: $template");
         $templateid=$templates[0]['templateid'];
         $scenarios=self::request($api, 'httptest.get', ['output'=>'extend', 'templateids'=>[$templateid], 'selectSteps'=>'extend']);
-        $triggers=self::request($api, 'trigger.get', ['output'=>'extend', 'templateids'=>[$templateid], 'expandExpression'=>true]);
+        $triggers=self::request($api, 'trigger.get', ['output'=>'extend', 'templateids'=>[$templateid], 'expandExpression'=>true, 'selectTags'=>['tag','value'], 'selectItems'=>['hostid','key_']]);
+        return ['templateid'=>$templateid, 'scenarios'=>$scenarios, 'triggers'=>$triggers];
+    }
+
+    /** Строит полный план, затем применяет его: сначала сценарии, затем их триггеры. */
+    public static function sync($api, string $template, array $checks, bool $real=false): array {
+        $snapshot=self::readTemplate($api, $template);
+        $templateid=$snapshot['templateid'];
+        $scenarios=$snapshot['scenarios'];
+        $triggers=$snapshot['triggers'];
         $plan=[];
         foreach ($checks as $name=>$check) {
             foreach (['scenario','trigger'] as $kind) {
@@ -135,7 +215,13 @@ class webChecks {
                 if ($found!==null && $scenario) {
                     usort($found['steps'], function ($a, $b) { return (int)$a['no']<=>(int)$b['no']; }); // API не гарантирует порядок шагов.
                 }
-                $params=$found===null?$check[$kind]:self::diff($check[$kind], $found);
+                $desired=$check[$kind];
+                if (!$scenario && array_key_exists('serviceids', $check)) {
+                    if (!isset($check['supportTags'])) throw new RuntimeException("$name: теги Inventory не подготовлены");
+                    // Заменяем только сопровождение; alert и остальные ручные теги сохраняются.
+                    $desired['tags']=zabbixApi::updateTags($desired['tags']??$found['tags']??[], $check['supportTags']);
+                }
+                $params=$found===null?$desired:self::diff($desired, $found);
                 if (!$params) continue;
                 if ($found!==null) $params[$idField]=$found[$idField];
                 elseif ($scenario) $params['hostid']=$templateid;

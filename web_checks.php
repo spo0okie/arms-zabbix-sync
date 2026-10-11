@@ -18,8 +18,18 @@ try {
     $checks=webChecks::prepare($data);
     if (!is_file(__DIR__.'/config.priv.php')) throw new RuntimeException('Нет config.priv.php');
     require __DIR__.'/config.priv.php';
+    $inventory=null;
+    foreach ($checks as $check) {
+        if (empty($check['serviceids'])) continue;
+        require_once __DIR__.'/lib_inventoryApi.php';
+        $inventory=new inventoryApi();
+        // Запросы сопровождения выполняются до любых записей в Zabbix, включая пробный запуск.
+        $inventory->init($webInventory, $inventoryAuth);
+        break;
+    }
+    $checks=webChecks::enrichSupportTags($checks, $inventory); // Для явного [] подключение к Inventory не требуется.
     $api=new zabbixApi();
-    // Для работы с одним шаблоном не нужен полный кэш узлов и Inventory.
+    // Для работы с одним шаблоном не нужен полный кэш узлов Zabbix.
     $api->apiUrl=$zabbixApiUrl;
     $api->authToken=$zabbixAuth;
     echo $real?"Применение изменений\n":"Пробный запуск: изменения не применяются\n";

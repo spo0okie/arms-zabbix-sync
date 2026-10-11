@@ -2,11 +2,17 @@
 /**
  * Скопируйте в web.data.priv.php. template — техническое имя существующего шаблона.
  * name — имя сценария; триггер называется «Недоступен <name>».
+ * trigger_name — необязательное явное имя триггера вместо «Недоступен <name>».
  * problem — число последовательных ошибок (по умолчанию 5).
  * recovery — число последовательных успехов; null/отсутствие — восстановление по Problem.
  * delay — интервал сценария (1m), priority — важность триггера (3), status — 0/1.
  * Если steps отсутствует: один запрос на url, HTTP 200, таймаут 10s.
  * Явные шаги выполняются в порядке массива; timeout/status_codes имеют те же умолчания.
+ * serviceids — ID сервисов Inventory: отдельные теги serviceman/supportteam на триггере.
+ * Без serviceids теги сохраняются; serviceids => [] очищает только теги сопровождения.
+ * Экспорт web_checks_export.php сохраняет problem_expression/recovery_expression буквально;
+ * эти поля имеют приоритет над problem/recovery. trigger_status переопределяет статус триггера,
+ * trigger_tags задаёт его полный список тегов в формате [['tag'=>'...', 'value'=>'...']].
  */
 return [
     'template'=>'Service web monitoring',
@@ -16,9 +22,11 @@ return [
             'url'=>'https://staging.domain.local:8443/',
             'problem'=>5,
             'recovery'=>2,
+            'serviceids'=>[42, 43], // Ответственные и поддержка обоих сервисов без повторов.
         ],
         [
             'name'=>'Портал',
+            'trigger_name'=>'Портал недоступен с {HOST.NAME}', // Имя сценария и его ключ не меняются.
             'url'=>'https://portal.example.com/',
             'problem'=>3, // Восстановление — когда условие проблемы перестанет выполняться.
         ],

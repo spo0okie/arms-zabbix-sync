@@ -19,11 +19,54 @@ class webChecksFakeApi {
     }
 }
 
+/** Подмена Inventory для проверки объединения ответственных нескольких сервисов. */
+class webChecksFakeInventory {
+    public $calls=[];
+    public $tags=[
+        42=>['serviceman'=>['Иванов'], 'supportteam'=>['Петров','Сидоров']],
+        43=>['serviceman'=>['Иванов','Петров'], 'supportteam'=>['Сидоров']],
+    ];
+
+    /** Возвращает теги сервиса или пустой ответ при ошибке его получения. */
+    public function getServiceSupportTags($id): array {
+        $this->calls[]=$id;
+        return $this->tags[$id]??[];
+    }
+}
+
 /** Проверки выражений, идемпотентности, порядка записи и остановки при ошибках API. */
 class WebChecksTest extends miniTestCase {
     /** Минимальная конфигурация тестового сервиса. */
     private function data(array $options=[]): array {
         return ['template'=>'Service web monitoring', 'services'=>[array_merge(['name'=>'Сайт', 'url'=>'https://example.com/'], $options)]];
+    }
+
+    /** Явное имя используется для поиска триггера, сохраняя ключ сценария и его историю. */
+    public function testCustomTriggerNameMatching() {
+        $default=webChecks::prepare($this->data())['Сайт'];
+        $checks=webChecks::prepare($this->data(['trigger_name'=>'Портал недоступен с {HOST.NAME}']));
+        $this->assertSame($default['trigger']['expression'], $checks['Сайт']['trigger']['expression']);
+        $api=new webChecksFakeApi();
+        $api->scenarios=[array_merge($default['scenario'], ['httptestid'=>'20', 'templateid'=>'0'])];
+        $api->triggers=[array_merge($checks['Сайт']['trigger'], ['triggerid'=>'30', 'templateid'=>'0', 'priority'=>'4'])];
+        ob_start();
+        try { $plan=webChecks::sync($api, 'Service web monitoring', $checks); }
+        finally { ob_end_clean(); }
+        $this->assertSame([['method'=>'trigger.update', 'params'=>['priority'=>3, 'triggerid'=>'30']]], $plan);
+    }
+
+    /** Пустое имя и совпадение явного имени с типовым именем другого сервиса запрещены. */
+    public function testInvalidOrDuplicateTriggerName() {
+        foreach (['', '   ', null, 42, "Имя\nтриггера"] as $name) {
+            try { webChecks::prepare($this->data(['trigger_name'=>$name])); }
+            catch (InvalidArgumentException $e) { continue; }
+            $this->fail('Некорректное имя триггера принято');
+        }
+        $data=$this->data(['trigger_name'=>'Недоступен Портал']);
+        $data['services'][]=['name'=>'Портал', 'url'=>'https://example.org/'];
+        try { webChecks::prepare($data); }
+        catch (InvalidArgumentException $e) { return; }
+        $this->fail('Повтор имени триггера принят');
     }
 
     /** Типовой шаг и выражения повторяют заданные условия проблемы и восстановления. */
@@ -146,5 +189,80 @@ class WebChecksTest extends miniTestCase {
             }
             $this->fail('Конфликт не обнаружен');
         }
+    }
+
+    /** Несколько сервисов объединяются без повторов, каждый ID запрашивается один раз. */
+    public function testSupportTagCreation() {
+        $inventory=new webChecksFakeInventory();
+        $data=$this->data(['serviceids'=>[42,43,42]]);
+        $data['services'][]=['name'=>'Второй сайт', 'url'=>'https://example.org/', 'serviceids'=>[43]];
+        $checks=webChecks::enrichSupportTags(webChecks::prepare($data), $inventory);
+        $this->assertSame([42,43], $inventory->calls);
+        $this->assertSame(['serviceman'=>['Иванов','Петров'], 'supportteam'=>['Петров','Сидоров']], $checks['Сайт']['supportTags']);
+        $api=new webChecksFakeApi();
+        ob_start();
+        try { $plan=webChecks::sync($api, 'Service web monitoring', $checks); }
+        finally { ob_end_clean(); }
+        $this->assertFalse(isset($plan[0]['params']['tags'])); // Теги нужны на триггере, не на сценарии.
+        $this->assertSame([
+            ['tag'=>'serviceman', 'value'=>'Иванов'], ['tag'=>'serviceman', 'value'=>'Петров'],
+            ['tag'=>'supportteam', 'value'=>'Петров'], ['tag'=>'supportteam', 'value'=>'Сидоров'],
+        ], $plan[1]['params']['tags']);
+    }
+
+    /** Обновление убирает старые фамилии и сохраняет остальные теги; порядок тегов не влияет. */
+    public function testSupportTagUpdateAndRepeat() {
+        $checks=webChecks::enrichSupportTags(webChecks::prepare($this->data(['serviceids'=>[42]])), new webChecksFakeInventory());
+        $api=new webChecksFakeApi();
+        $api->scenarios=[array_merge($checks['Сайт']['scenario'], ['httptestid'=>'20', 'templateid'=>'0'])];
+        $api->triggers=[array_merge($checks['Сайт']['trigger'], ['triggerid'=>'30', 'templateid'=>'0', 'tags'=>[
+            ['tag'=>'serviceman', 'value'=>'Старый'], ['tag'=>'supportteam', 'value'=>'Старый'],
+            ['tag'=>'alert', 'value'=>'sms'],
+        ]])];
+        ob_start();
+        try {
+            $plan=webChecks::sync($api, 'Service web monitoring', $checks, true);
+            $this->assertSame(1, count($plan));
+            $tags=$plan[0]['params']['tags'];
+            $this->assertSame(4, count($tags));
+            $this->assertTrue(in_array(['tag'=>'alert', 'value'=>'sms'], $tags, true));
+            $this->assertFalse(in_array(['tag'=>'serviceman', 'value'=>'Старый'], $tags, true));
+            $this->assertSame('trigger.update', $api->calls[3]['method']);
+            $api->triggers[0]['tags']=array_reverse($tags);
+            $this->assertSame([], webChecks::sync($api, 'Service web monitoring', $checks, true));
+            $this->assertSame(['tag','value'], $api->calls[2]['params']['selectTags']);
+        } finally { ob_end_clean(); }
+    }
+
+    /** Отсутствие поля сохраняет теги, явный пустой список удаляет только сопровождение. */
+    public function testEmptyAndMissingServiceIds() {
+        $checks=webChecks::prepare($this->data());
+        $api=new webChecksFakeApi();
+        $api->scenarios=[array_merge($checks['Сайт']['scenario'], ['httptestid'=>'20', 'templateid'=>'0'])];
+        $api->triggers=[array_merge($checks['Сайт']['trigger'], ['triggerid'=>'30', 'templateid'=>'0', 'tags'=>[
+            ['tag'=>'serviceman', 'value'=>'Иванов'], ['tag'=>'supportteam', 'value'=>'Петров'], ['tag'=>'alert', 'value'=>'sms'],
+        ]])];
+        $inventory=new webChecksFakeInventory();
+        ob_start();
+        try {
+            $this->assertSame([], webChecks::sync($api, 'Service web monitoring', $checks));
+            $empty=webChecks::enrichSupportTags(webChecks::prepare($this->data(['serviceids'=>[]])), $inventory);
+            $plan=webChecks::sync($api, 'Service web monitoring', $empty);
+            $this->assertSame([['tag'=>'alert', 'value'=>'sms']], $plan[0]['params']['tags']);
+            $this->assertSame([], $inventory->calls);
+        } finally { ob_end_clean(); }
+    }
+
+    /** Ошибочные ID отвергаются при подготовке; ошибка Inventory не превращается в очистку тегов. */
+    public function testInvalidServiceIdsAndInventoryFailure() {
+        foreach ([null, '42', [0], [-1], ['abc'], [true], [1.5]] as $ids) {
+            try { webChecks::prepare($this->data(['serviceids'=>$ids])); }
+            catch (InvalidArgumentException $e) { continue; }
+            $this->fail('Некорректные serviceids приняты');
+        }
+        $checks=webChecks::prepare($this->data(['serviceids'=>['99']]));
+        try { webChecks::enrichSupportTags($checks, new webChecksFakeInventory()); }
+        catch (RuntimeException $e) { return; }
+        $this->fail('Ошибка Inventory проигнорирована');
     }
 }
