@@ -12,8 +12,8 @@ return [
     'template'=>'Service web monitoring',
     'services'=>[
         [
-            'name'=>'Сайт staging.dstactivebase.dstural.ru:446 c {HOST.NAME}',
-            'url'=>'https://staging.dstactivebase.dstural.ru:446/',
+            'name'=>'Сайт staging.domain.local:8443 c {HOST.NAME}',
+            'url'=>'https://staging.domain.local:8443/',
             'problem'=>5,
             'recovery'=>2,
         ],
