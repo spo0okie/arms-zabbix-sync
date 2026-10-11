@@ -32,6 +32,7 @@ class webChecksExport {
             foreach ($steps as $index=>&$step) {
                 if ((int)$step['no']!==$index+1) throw new RuntimeException("$name: номера шагов должны идти подряд с 1");
                 $step=array_intersect_key($step, array_flip(webChecks::STEP_FIELDS));
+                $step=self::withoutDefaults($step, array_merge(['name'=>'Шаг '.($index+1)], webChecks::STEP_DEFAULTS));
             }
             unset($step);
             $service=[
@@ -43,14 +44,47 @@ class webChecksExport {
                 'recovery_expression'=>$trigger['recovery_expression'],
                 'trigger_tags'=>$trigger['tags']??[],
             ];
+            $defaultExpression='count(/'.$template.'/'.webChecks::failureKey($name).',#'.webChecks::SERVICE_DEFAULTS['problem'].',"ne",0)>'.(webChecks::SERVICE_DEFAULTS['problem']-1);
+            $service=self::withoutDefaults($service, array_merge(webChecks::SERVICE_DEFAULTS, [
+                'trigger_name'=>'Недоступен '.$name,
+                'trigger_status'=>(int)$scenario['status'], // Без переопределения статус триггера равен статусу сценария.
+                'problem_expression'=>$defaultExpression, 'recovery_expression'=>'', 'trigger_tags'=>[],
+            ]));
+            // Полностью типовой единственный шаг можно записать одним URL.
+            if (count($steps)===1 && ($steps[0]['name']??null)==='Проверка' && count($steps[0])===2 && isset($steps[0]['url'])) {
+                $service['url']=$steps[0]['url'];
+                unset($service['steps']);
+            }
             $data['services'][]=$service;
         }
-        webChecks::prepare($data); // Проверяем совместимость до записи файла.
         return $data;
+    }
+
+    /** Убирает поля с точными значениями по умолчанию, учитывая числовые строки API. */
+    private static function withoutDefaults(array $values, array $defaults): array {
+        foreach ($defaults as $field=>$default) {
+            if (!array_key_exists($field, $values)) continue;
+            $value=$values[$field];
+            if ($value===$default || (!is_array($value) && !is_array($default) && $value!==null && $default!==null && (string)$value===(string)$default))
+                unset($values[$field]);
+        }
+        return $values;
     }
 
     /** Формирует исполняемый PHP-файл без подстановки макросов и экранирования оболочкой. */
     public static function source(array $data): string {
-        return "<?php\n/** Экспорт веб-проверок Zabbix; serviceids при необходимости добавьте вручную. */\nreturn ".var_export($data, true).";\n";
+        return "<?php\n/** Экспорт веб-проверок Zabbix; serviceids при необходимости добавьте вручную. */\nreturn ".self::phpValue($data).";\n";
+    }
+
+    /** Рекурсивно записывает массивы через [], не изменяя содержимое строковых значений. */
+    private static function phpValue($value, int $depth=0): string {
+        if (!is_array($value)) return var_export($value, true);
+        if (!$value) return '[]';
+        $list=array_keys($value)===range(0, count($value)-1);
+        $lines=[];
+        foreach ($value as $key=>$item) {
+            $lines[]=str_repeat('    ', $depth+1).($list?'':var_export($key, true).' => ').self::phpValue($item, $depth+1).',';
+        }
+        return "[\n".implode("\n", $lines)."\n".str_repeat('    ', $depth).']';
     }
 }

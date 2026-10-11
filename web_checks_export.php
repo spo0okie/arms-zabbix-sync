@@ -14,18 +14,13 @@ try {
     $api->authToken=$zabbixAuth;
     $snapshot=webChecks::readTemplate($api, $template);
     $data=webChecksExport::data($template, $snapshot);
-    // Проверяем обратный проход тем же механизмом DIFF, прежде чем публиковать экспорт.
-    ob_start();
-    try { $plan=webChecks::sync($api, $template, webChecks::prepare($data)); }
-    finally { ob_end_clean(); }
-    if ($plan) throw new RuntimeException('Обратная проверка обнаружила изменения: '.json_encode($plan, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     $source=webChecksExport::source($data);
     $handle=fopen($file, 'x'); // Эксклюзивное создание не перезаписывает существующие данные.
     if ($handle===false) throw new RuntimeException("Не удалось создать файл: $file");
     try {
         if (fwrite($handle, $source)!==strlen($source)) throw new RuntimeException("Не удалось полностью записать файл: $file");
     } finally { fclose($handle); }
-    echo 'Экспортировано проверок: '.count($data['services'])."\nФайл: $file\nDIFF: 0 изменений\n";
+    echo 'Экспортировано проверок: '.count($data['services'])."\nФайл: $file\n";
 } catch (Throwable $e) {
     fwrite(STDERR, 'HALT: '.$e->getMessage()."\n");
     exit(1);

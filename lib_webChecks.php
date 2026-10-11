@@ -5,6 +5,12 @@ require_once __DIR__.'/lib_zabbixApi.php';
 class webChecks {
     // Поля шага, поддерживаемые форматом данных и экспортом из Zabbix.
     const STEP_FIELDS=['name','url','timeout','status_codes','required','follow_redirects','posts','headers','variables','query_fields','retrieve_mode'];
+    // Единые умолчания генератора и компактного экспорта.
+    const SERVICE_DEFAULTS=['problem'=>5, 'recovery'=>null, 'delay'=>'1m', 'status'=>0, 'priority'=>3];
+    const STEP_DEFAULTS=[
+        'timeout'=>'10s', 'status_codes'=>'200', 'required'=>'', 'follow_redirects'=>1,
+        'retrieve_mode'=>0, 'posts'=>'', 'headers'=>[], 'variables'=>[], 'query_fields'=>[],
+    ];
     /** Преобразует PHP-данные в сценарии и триггеры, проверяя их до обращения к API. */
     public static function prepare(array $data): array {
         $template=$data['template']??null;
@@ -16,6 +22,7 @@ class webChecks {
         $triggerNames=[];
         foreach ($data['services'] as $service) {
             if (!is_array($service)) throw new InvalidArgumentException('Описание сервиса должно быть массивом');
+            $service=array_merge(self::SERVICE_DEFAULTS, $service); // Частичные описания используют общие умолчания.
             $name=$service['name']??null;
             if (!is_string($name) || trim($name)==='' || preg_match('/[\r\n]/', $name))
                 throw new InvalidArgumentException('Нужно непустое имя сервиса без перевода строки');
@@ -44,11 +51,7 @@ class webChecks {
                 // Ограниченный набор полей; порядковые номера назначаются по порядку массива.
             $unknown=array_diff(array_keys($step), self::STEP_FIELDS);
                 if ($unknown) throw new InvalidArgumentException("$name: неизвестные поля шага: ".implode(', ', $unknown));
-                $step=array_merge([
-                    'name'=>'Шаг '.($index+1), 'timeout'=>'10s', 'status_codes'=>'200',
-                    'required'=>'', 'follow_redirects'=>1, 'retrieve_mode'=>0,
-                    'posts'=>'', 'headers'=>[], 'variables'=>[], 'query_fields'=>[],
-                ], $step); // Удаление настройки из файла возвращает шаг к её значению по умолчанию.
+                $step=array_merge(['name'=>'Шаг '.($index+1)], self::STEP_DEFAULTS, $step); // Снятая настройка возвращается к умолчанию.
                 if (!is_string($step['name']) || trim($step['name'])==='' || isset($stepNames[$step['name']]))
                     throw new InvalidArgumentException("$name: имена шагов должны быть непустыми и уникальными");
                 if (!isset($step['url']) || !is_string($step['url']) || trim($step['url'])==='')

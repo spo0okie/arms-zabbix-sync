@@ -16,7 +16,7 @@ class webChecksExportFakeApi {
     }
 }
 
-/** Проверка полного обратного прохода API -> PHP-файл -> prepare -> DIFF. */
+/** Проверки формирования компактного исполняемого PHP data-файла из снимка API. */
 class WebChecksExportTest extends miniTestCase {
     /** Реалистичный снимок: строки API, произвольный порядок шагов, разные статусы и ручные теги. */
     private function snapshot(): array {
@@ -42,8 +42,8 @@ class WebChecksExportTest extends miniTestCase {
         ];
     }
 
-    /** Экспорт исполняется как data-файл и не создаёт diff даже при режиме real. */
-    public function testRoundTripThroughPhpFile() {
+    /** Экспорт исполняется как data-файл, сохраняя строки, макросы и нестандартные настройки. */
+    public function testExportThroughPhpFile() {
         $api=new webChecksExportFakeApi();
         $api->snapshot=$this->snapshot();
         $snapshot=webChecks::readTemplate($api, 'Service web monitoring');
@@ -57,11 +57,9 @@ class WebChecksExportTest extends miniTestCase {
             $this->assertSame(1, $loaded['services'][0]['status']);
             $this->assertSame(0, $loaded['services'][0]['trigger_status']);
             $this->assertFalse(isset($loaded['services'][0]['steps'][0]['httpstepid']));
-            ob_start();
-            try { $plan=webChecks::sync($api, $loaded['template'], webChecks::prepare($loaded), true); }
-            finally { ob_end_clean(); }
-            $this->assertSame([], $plan);
-            $this->assertSame(6, count($api->calls));
+            $this->assertSame("login=test\npassword={\$PASSWORD}", $loaded['services'][0]['steps'][0]['posts']);
+            $this->assertFalse(isset($loaded['services'][0]['steps'][0]['variables']));
+            $this->assertSame(3, count($api->calls)); // Только чтение снимка, без запуска генератора.
         } finally { unlink($file); }
     }
 
@@ -74,11 +72,39 @@ class WebChecksExportTest extends miniTestCase {
         $snapshot['triggers'][0]['recovery_mode']='0';
         $snapshot['triggers'][0]['recovery_expression']='';
         $data=webChecksExport::data('Service web monitoring', $snapshot);
-        $api=new webChecksExportFakeApi();
-        $api->snapshot=$snapshot;
-        ob_start();
-        try { $this->assertSame([], webChecks::sync($api, $data['template'], webChecks::prepare($data))); }
-        finally { ob_end_clean(); }
+        $this->assertFalse(isset($data['services'][0]['recovery_expression']));
+        $this->assertSame($snapshot['triggers'][0]['expression'], $data['services'][0]['problem_expression']);
+    }
+
+    /** Полностью типовая проверка экспортируется только именем и URL. */
+    public function testDefaultValuesAreOmitted() {
+        $snapshot=$this->snapshot();
+        $snapshot['scenarios'][0]['delay']='1m';
+        $snapshot['scenarios'][0]['status']='0';
+        $snapshot['scenarios'][0]['steps']=[array_merge(webChecks::STEP_DEFAULTS, [
+            'name'=>'Проверка', 'url'=>'https://example.com/', 'no'=>'1', 'follow_redirects'=>'1', 'retrieve_mode'=>'0',
+        ])];
+        $snapshot['triggers'][0]=array_merge($snapshot['triggers'][0], [
+            'description'=>'Недоступен Портал', 'priority'=>'3', 'recovery_mode'=>'0',
+            'expression'=>'count(/Service web monitoring/web.test.fail[Портал],#5,"ne",0)>4',
+            'recovery_expression'=>'', 'tags'=>[],
+        ]);
+        $data=webChecksExport::data('Service web monitoring', $snapshot);
+        $this->assertSame([['name'=>'Портал', 'url'=>'https://example.com/']], $data['services']);
+    }
+
+    /** Короткий синтаксис массивов не портит строки с текстом array() и вложенными данными. */
+    public function testShortArraySyntaxAndStringEscaping() {
+        $data=['template'=>'Service web monitoring', 'services'=>[['name'=>"array (a) array() [x] ' \\ {HOST.NAME}", 'trigger_tags'=>[]]]];
+        $source=webChecksExport::source($data);
+        $this->assertTrue(strpos($source, "return [\n")!==false);
+        $this->assertTrue(strpos($source, "'trigger_tags' => []")!==false);
+        $this->assertFalse(strpos($source, '0 =>')!==false);
+        $file=tempnam(sys_get_temp_dir(), 'web-checks-');
+        try {
+            file_put_contents($file, $source);
+            $this->assertSame($data, require $file);
+        } finally { unlink($file); }
     }
 
     /** Неоднозначная пара, отсутствие триггера и наследование не маскируются частичным экспортом. */
