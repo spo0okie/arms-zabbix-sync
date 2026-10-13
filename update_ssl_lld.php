@@ -20,7 +20,7 @@ $dryRun = !in_array('real', $argv);
 // --- 1. Получаем обработанные данные через lld.php --------------------------
 
 echo "Running lld.php ... ";
-$lldJson = shell_exec('php ' . escapeshellarg(__DIR__ . '/lld.php') . ' 2>&1');
+$lldJson = shell_exec('php ' . escapeshellarg(__DIR__ . '/ssl.data.generate.php') . ' 2>&1');
 $lldData  = $lldJson ? json_decode($lldJson, true) : null;
 
 if (!is_array($lldData) || !isset($lldData['data'])) {
