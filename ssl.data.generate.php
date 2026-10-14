@@ -20,7 +20,7 @@ require_once __DIR__ . '/lib_inventoryApi.php';
 
 $items = require __DIR__.'/ssl.data.priv.php';
 if (!is_array($items)) {
-    fwrite(STDERR, "lld.php: invalid input data\n");
+    fwrite(STDERR, "ssl.data.generate.php: invalid input data\n");
     exit(1);
 }
 
@@ -31,6 +31,21 @@ $inventory->init($webInventory, $inventoryAuth);
 
 $result = [];
 foreach ($items as $item) {
+
+	//смотрим задан ли порт в домене
+	$tokens=explode(':',$item['{#DOMAIN}']);
+
+	//если задан и в домене и отдельно - сбой
+	if (!array_key_exists('{#PORT}', $item) && isset($tokens[1])) {
+		fwrite(STDERR, "ssl.data.generate.php: port set in {$item['{#DOMAIN}']} and in {#PORT}\n");
+    	exit(2);
+	}
+
+	//если только в домене - используем его
+	if (isset($tokens[1])) {
+		$item['{#PORT}']=$tokens[1];
+		$item['{#DOMAIN}']=$tokens[0];
+	}
 
     // defaults
     if (!array_key_exists('{#NAME}', $item))
